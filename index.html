@@ -621,7 +621,7 @@ Click to switch">
 
   <!-- Footer -->
   <footer class="border-t border-terminal-border mt-8 py-4 text-center text-xs text-terminal-muted" data-tooltip="Built for memory-ts integration&#10;Hover elements for tooltips">
-    MEMORY_BANK v2.1 // memory-ts dashboard // clickable stats + domain filter + version history + finder/warp integration
+    MEMORY_BANK v2.2 // memory-ts dashboard // security hardening + XSS protection
   </footer>
 
   <script>
@@ -630,6 +630,41 @@ Click to switch">
     let directoryHandle = null;
     let refreshInterval = null;
     const MEMORY_API = 'http://localhost:8765';
+
+    // Security: HTML escaping to prevent XSS
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }
+
+    // Security: Escape for use in HTML attributes (onclick, data-tooltip, etc.)
+    function escapeAttr(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/'/g, '&#39;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    // Security: Validate file paths (basic traversal prevention)
+    function isValidPath(path) {
+      if (!path || typeof path !== 'string') return false;
+      // Block obvious traversal attempts
+      if (path.includes('..') || path.includes('\0')) return false;
+      // Must start with ~ or / (absolute-ish paths only)
+      return path.startsWith('~') || path.startsWith('/');
+    }
+
+    // Get home directory (works on macOS, falls back gracefully)
+    function getHomeDir() {
+      // In browser context, we can't reliably get home dir
+      // Use a reasonable default that the server can expand
+      return '/Users/' + (window.USER_NAME || 'lee');
+    }
 
     // Update memory via API
     async function updateMemory(memoryId, updates) {
@@ -734,12 +769,19 @@ Click to switch">
           value = parseInt(value);
         }
 
-        // Parse booleans
-        if (value === 'true') value = true;
-        if (value === 'false') value = false;
+        // Parse booleans (normalize to actual booleans)
+        if (value === 'true' || value === true) value = true;
+        else if (value === 'false' || value === false) value = false;
 
         memory[key] = value;
       }
+
+      // Normalize common boolean fields to ensure consistency
+      const booleanFields = ['exclude_from_retrieval', 'action_required', 'awaiting_decision'];
+      booleanFields.forEach(field => {
+        if (memory[field] === 'true') memory[field] = true;
+        else if (memory[field] === 'false' || memory[field] === undefined) memory[field] = false;
+      });
 
       // Memory-ts format handling:
       // Convert unix timestamp (ms) to ISO string
@@ -897,8 +939,16 @@ Click to switch">
     // Reveal file in Finder
     function revealInFinder(filePath, event) {
       event.stopPropagation();
-      // Expand ~ to home directory
-      const expandedPath = filePath.replace(/^~/, '/Users/lee');
+
+      // Security: validate path before sending to server
+      if (!isValidPath(filePath)) {
+        console.warn('Invalid file path blocked:', filePath);
+        return;
+      }
+
+      // Expand ~ to home directory (server should also validate)
+      const expandedPath = filePath.replace(/^~/, getHomeDir());
+
       // Try to use the dashboard server API
       fetch('http://localhost:8701/api/reveal', {
         method: 'POST',
@@ -907,7 +957,7 @@ Click to switch">
       }).catch(() => {
         // Fallback: copy path to clipboard
         navigator.clipboard.writeText(expandedPath).then(() => {
-          alert(`Path copied to clipboard:\\n${expandedPath}`);
+          alert(`Path copied to clipboard:\n${expandedPath}`);
         });
       });
     }
@@ -974,12 +1024,13 @@ Click to switch">
       if (chain.length === 0) {
         // Just show the ID reference as clickable if we can't find the actual memory
         if (supersededBy) {
+          const safeSupersededBy = escapeAttr(supersededBy);
           return `
             <div class="superseded-timeline border-t border-terminal-border pt-3 mt-3">
               <div class="text-xs text-terminal-muted mb-2">📜 VERSION HISTORY</div>
               <div class="text-xs text-mem-superseded">
                 <span class="text-terminal-muted">Replaced by:</span>
-                <span class="clickable-link" onclick="scrollToMemory('${supersededBy}', event)">${supersededBy.slice(0, 12)}...</span>
+                <span class="clickable-link" onclick="scrollToMemory('${safeSupersededBy}', event)">${escapeHtml(supersededBy.slice(0, 12))}...</span>
               </div>
             </div>
           `;
@@ -1003,11 +1054,15 @@ Click to switch">
         const typeIcon = entry.type === 'previous' ? '◀' : '▶';
         const typeColor = entry.type === 'previous' ? 'text-mem-superseded' : 'text-mem-global';
 
+        // Security: escape user content
+        const safeMemId = escapeAttr(m.id);
+        const safeMemTitle = escapeHtml(m.title || m.reasoning || 'Untitled');
+
         // Try to determine what changed
         const whatChanged = getVersionDiff(mem, m, entry.type);
 
         timelineHtml += `
-          <div class="timeline-entry clickable-link" onclick="scrollToMemory('${m.id}', event)" data-tooltip="Click to jump to this memory">
+          <div class="timeline-entry clickable-link" onclick="scrollToMemory('${safeMemId}', event)" data-tooltip="Click to jump to this memory">
             <div class="timeline-dot-container">
               <div class="timeline-dot ${m.scope === 'global' ? 'global' : 'project'}"></div>
               ${!isLast ? '<div class="timeline-line"></div>' : ''}
@@ -1015,13 +1070,13 @@ Click to switch">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-1">
                 <span class="${typeColor} text-xs font-medium">${typeIcon} ${typeLabel}</span>
-                <span class="text-terminal-muted text-xs">${relativeTime(m.created)}</span>
+                <span class="text-terminal-muted text-xs">${escapeHtml(relativeTime(m.created))}</span>
               </div>
-              <div class="text-sm text-terminal-text mb-1">${m.title || m.reasoning || 'Untitled'}</div>
+              <div class="text-sm text-terminal-text mb-1">${safeMemTitle}</div>
               ${whatChanged ? `
                 <div class="version-diff">
                   <div class="diff-label">What changed:</div>
-                  <div class="text-terminal-text">${whatChanged}</div>
+                  <div class="text-terminal-text">${escapeHtml(whatChanged)}</div>
                 </div>
               ` : ''}
             </div>
@@ -1037,6 +1092,16 @@ Click to switch">
     function getVersionDiff(currentMem, otherMem, relationship) {
       const diffs = [];
 
+      // Safe JSON comparison helper
+      function safeJsonCompare(a, b) {
+        try {
+          return JSON.stringify(a) === JSON.stringify(b);
+        } catch {
+          // If stringify fails (circular refs, BigInt, etc.), fall back to reference comparison
+          return a === b;
+        }
+      }
+
       if (relationship === 'previous') {
         // Comparing current to previous
         if (currentMem.importance !== otherMem.importance) {
@@ -1049,7 +1114,7 @@ Click to switch">
         if (currentMem.body !== otherMem.body) {
           diffs.push('Content refined');
         }
-        if (JSON.stringify(currentMem.semantic_tags) !== JSON.stringify(otherMem.semantic_tags)) {
+        if (!safeJsonCompare(currentMem.semantic_tags, otherMem.semantic_tags)) {
           diffs.push('Tags updated');
         }
       } else {
@@ -1082,11 +1147,21 @@ Click to switch">
     function renderMemory(mem) {
       const scopeClass = mem.scope === 'global' ? 'global' : 'project';
       const statusClass = mem.status === 'superseded' ? 'superseded' : '';
-      const buriedClass = (mem.exclude_from_retrieval === 'true' || mem.exclude_from_retrieval === true) ? 'buried' : '';
+      const buriedClass = mem.exclude_from_retrieval ? 'buried' : '';
       const scopeIcon = mem.scope === 'global' ? '🌍' : '📁';
       const scopeColor = mem.scope === 'global' ? 'text-mem-global' : 'text-mem-project';
       const scopeLabel = mem.scope === 'global' ? 'Global' : 'Project';
       const importance = mem.importance || 5;
+
+      // Security: escape all user-controlled content
+      const safeTitle = escapeHtml(mem.title || 'Untitled');
+      const safeBody = escapeHtml(mem.body || 'No content');
+      const safeId = escapeAttr(mem.id);
+      const safeProjectId = escapeHtml(mem.project_id || 'unknown');
+      const safeProjectPath = escapeHtml(mem.project_path || '');
+      const safeSessionId = escapeAttr(mem.session_id || '');
+      const safeContextType = escapeHtml(mem.context_type || '');
+      const safeTemporal = escapeHtml(mem.temporal_relevance || '');
 
       // Importance color classes
       const impLevel = importance >= 8 ? 'high' : importance >= 4 ? 'medium' : 'low';
@@ -1111,8 +1186,14 @@ Click to switch">
       // Build superseded timeline if this memory supersedes others or has been superseded
       const supersededTimeline = buildSupersededTimeline(mem);
 
+      // Security: escape tags and files arrays
+      const safeTags = (mem.semantic_tags || []).map(t => escapeAttr(t));
+      const safeTriggers = (mem.trigger_phrases || []).map(t => escapeHtml(t));
+      const safeFiles = (mem.related_files || []).filter(isValidPath).map(f => escapeAttr(f));
+      const safeDomain = escapeAttr(domain || '');
+
       return `
-        <div class="memory-card ${scopeClass} ${statusClass} ${buriedClass} imp-${impLevel} bg-terminal-surface border border-terminal-border ${impGlow} border-l-2 cursor-pointer" data-memory-id="${mem.id}" onclick="toggleExpand(this)">
+        <div class="memory-card ${scopeClass} ${statusClass} ${buriedClass} imp-${impLevel} bg-terminal-surface border border-terminal-border ${impGlow} border-l-2 cursor-pointer" data-memory-id="${safeId}" onclick="toggleExpand(this)">
           <div class="p-4">
             <!-- Top row: Importance bar + date/domain + expand icon -->
             <div class="flex items-center mb-2 gap-3">
@@ -1120,9 +1201,9 @@ Click to switch">
 Score: ${importance}/10">${importanceBars}</span>
               <div class="flex-1"></div>
               <div class="flex items-center gap-2 text-xs flex-shrink-0">
-                <span class="date-friendly" data-tooltip="${fullDate}">${friendlyDate}</span>
-                ${domain ? `<span class="domain-tag clickable-link" onclick="filterByDomain('${domain}', event)" data-tooltip="Knowledge domain
-Click to filter by ${domain}">${domain}</span>` : ''}
+                <span class="date-friendly" data-tooltip="${escapeAttr(fullDate)}">${escapeHtml(friendlyDate)}</span>
+                ${domain ? `<span class="domain-tag clickable-link" onclick="filterByDomain('${safeDomain}', event)" data-tooltip="Knowledge domain
+Click to filter by ${safeDomain}">${escapeHtml(domain)}</span>` : ''}
                 <span class="text-terminal-muted ml-1">▼</span>
               </div>
             </div>
@@ -1131,26 +1212,26 @@ Click to filter by ${domain}">${domain}</span>` : ''}
             <div class="flex items-start gap-2 mb-2 pr-16">
               <span class="${scopeColor} flex-shrink-0" data-tooltip="${scopeLabel} memory
 ${mem.scope === 'global' ? 'Applies across all projects' : 'Only surfaces in this project'}">${scopeIcon}</span>
-              <span class="memory-title text-terminal-bright font-medium leading-snug">${mem.title || 'Untitled'}</span>
+              <span class="memory-title text-terminal-bright font-medium leading-snug">${safeTitle}</span>
               ${mem.status === 'superseded' ? '<span class="text-xs text-mem-superseded flex-shrink-0" data-tooltip="Replaced by newer version">[SUPERSEDED]</span>' : ''}
             </div>
 
             <!-- Memory Controls - left aligned under text -->
             <div class="flex items-center gap-2 ml-6" onclick="event.stopPropagation()">
               <button class="promote px-2 py-1 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
-                      onclick="promoteMemory('${mem.id}', ${importance}, event)"
+                      onclick="promoteMemory('${safeId}', ${importance}, event)"
                       data-tooltip="Boost importance +1"
                       ${importance >= 10 ? 'disabled' : ''}>⬆</button>
               <button class="demote px-2 py-1 text-xs border border-terminal-border hover:border-mem-project hover:text-mem-project transition-colors"
-                      onclick="demoteMemory('${mem.id}', ${importance}, event)"
+                      onclick="demoteMemory('${safeId}', ${importance}, event)"
                       data-tooltip="Lower importance -1"
                       ${importance <= 1 ? 'disabled' : ''}>⬇</button>
-              ${mem.exclude_from_retrieval === 'true' || mem.exclude_from_retrieval === true
+              ${mem.exclude_from_retrieval
                 ? `<button class="unbury px-2 py-1 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
-                          onclick="unburyMemory('${mem.id}', event)"
+                          onclick="unburyMemory('${safeId}', event)"
                           data-tooltip="Unbury this memory">👁</button>`
                 : `<button class="bury px-2 py-1 text-xs border border-terminal-border hover:border-red-500 hover:text-red-500 transition-colors"
-                          onclick="buryMemory('${mem.id}', event)"
+                          onclick="buryMemory('${safeId}', event)"
                           data-tooltip="Bury from retrieval">🚫</button>`
               }
             </div>
@@ -1158,51 +1239,51 @@ ${mem.scope === 'global' ? 'Applies across all projects' : 'Only surfaces in thi
           <div class="memory-content border-t border-terminal-border">
             <div class="p-4 space-y-3">
               <!-- Tags -->
-              ${mem.semantic_tags && mem.semantic_tags.length ? `
+              ${safeTags.length ? `
                 <div class="flex flex-wrap gap-1.5" data-tooltip="Click a tag to filter&#10;Semantic tags for retrieval matching">
-                  ${mem.semantic_tags.map(t => `<button onclick="filterByTag('${t}', event)" class="tag-btn text-xs px-2 py-1 bg-mem-global/20 text-mem-global border border-mem-global/30 rounded hover:bg-mem-global/40 hover:border-mem-global transition-colors cursor-pointer">#${t}</button>`).join('')}
+                  ${safeTags.map(t => `<button onclick="filterByTag('${t}', event)" class="tag-btn text-xs px-2 py-1 bg-mem-global/20 text-mem-global border border-mem-global/30 rounded hover:bg-mem-global/40 hover:border-mem-global transition-colors cursor-pointer">#${escapeHtml(t)}</button>`).join('')}
                 </div>
               ` : ''}
 
               <!-- Body content -->
-              <pre class="text-sm text-terminal-text whitespace-pre-wrap font-mono leading-relaxed">${mem.body || 'No content'}</pre>
+              <pre class="text-sm text-terminal-text whitespace-pre-wrap font-mono leading-relaxed">${safeBody}</pre>
 
               <!-- Project context -->
               ${mem.project_id || mem.project_path ? `
                 <div class="text-xs bg-terminal-border/30 p-2 rounded" data-tooltip="Project where this memory was captured">
                   <span class="text-terminal-muted">📂 Source:</span>
-                  <span class="text-mem-project font-medium">${mem.project_id || 'unknown'}</span>
-                  ${mem.project_path ? `<span class="text-terminal-muted ml-2 font-mono text-[10px]">${mem.project_path}</span>` : ''}
+                  <span class="text-mem-project font-medium">${safeProjectId}</span>
+                  ${safeProjectPath ? `<span class="text-terminal-muted ml-2 font-mono text-[10px]">${safeProjectPath}</span>` : ''}
                 </div>
               ` : ''}
 
               <!-- Metadata grid -->
               <div class="grid grid-cols-2 gap-2 text-xs border-t border-terminal-border pt-3 mt-3">
-                ${mem.context_type ? `<div data-tooltip="Context type
-technical, personal, procedural"><span class="text-terminal-muted">Context:</span> <span class="text-terminal-text">${mem.context_type}</span></div>` : ''}
-                ${mem.temporal_relevance ? `<div data-tooltip="Relevance duration
-persistent, temporary, time-bound"><span class="text-terminal-muted">Temporal:</span> <span class="text-terminal-text">${mem.temporal_relevance}</span></div>` : ''}
+                ${safeContextType ? `<div data-tooltip="Context type
+technical, personal, procedural"><span class="text-terminal-muted">Context:</span> <span class="text-terminal-text">${safeContextType}</span></div>` : ''}
+                ${safeTemporal ? `<div data-tooltip="Relevance duration
+persistent, temporary, time-bound"><span class="text-terminal-muted">Temporal:</span> <span class="text-terminal-text">${safeTemporal}</span></div>` : ''}
                 ${mem.confidence_score ? `<div data-tooltip="Claude's confidence
 when capturing this memory"><span class="text-terminal-muted">Confidence:</span> <span class="text-terminal-text">${Math.round(parseFloat(mem.confidence_score) * 100)}%</span></div>` : ''}
-                ${mem.session_id ? `<div data-tooltip="Click to open session in Warp
-Session where memory was captured"><span class="text-terminal-muted">Session:</span> <span class="text-terminal-text font-mono text-[10px] clickable-link" onclick="openSessionInWarp('${mem.session_id}', event)">${mem.session_id.slice(0, 8)}...</span></div>` : ''}
-                ${mem.action_required === 'true' || mem.action_required === true ? `<div data-tooltip="Follow-up action needed"><span class="text-mem-project">⚡ Action required</span></div>` : ''}
-                ${mem.awaiting_decision === 'true' || mem.awaiting_decision === true ? `<div data-tooltip="Waiting for your input"><span class="text-mem-global">⏳ Awaiting decision</span></div>` : ''}
+                ${safeSessionId ? `<div data-tooltip="Click to open session in Warp
+Session where memory was captured"><span class="text-terminal-muted">Session:</span> <span class="text-terminal-text font-mono text-[10px] clickable-link" onclick="openSessionInWarp('${safeSessionId}', event)">${escapeHtml(mem.session_id.slice(0, 8))}...</span></div>` : ''}
+                ${mem.action_required ? `<div data-tooltip="Follow-up action needed"><span class="text-mem-project">⚡ Action required</span></div>` : ''}
+                ${mem.awaiting_decision ? `<div data-tooltip="Waiting for your input"><span class="text-mem-global">⏳ Awaiting decision</span></div>` : ''}
               </div>
 
               <!-- Trigger phrases -->
-              ${mem.trigger_phrases && mem.trigger_phrases.length ? `
+              ${safeTriggers.length ? `
                 <div class="text-xs border-t border-terminal-border pt-3" data-tooltip="Semantic matching keywords">
                   <span class="text-terminal-muted">Triggers:</span>
-                  <span class="text-terminal-text">${mem.trigger_phrases.join(', ')}</span>
+                  <span class="text-terminal-text">${safeTriggers.join(', ')}</span>
                 </div>
               ` : ''}
 
               <!-- Related files - clickable -->
-              ${mem.related_files && mem.related_files.length ? `
+              ${safeFiles.length ? `
                 <div class="text-xs border-t border-terminal-border pt-3">
                   <span class="text-terminal-muted">Files:</span>
-                  ${mem.related_files.map(f => `<span class="text-terminal-text font-mono clickable-link ml-1" onclick="revealInFinder('${f}', event)" data-tooltip="Click to reveal in Finder">${f}</span>`).join(',')}
+                  ${safeFiles.map(f => `<span class="text-terminal-text font-mono clickable-link ml-1" onclick="revealInFinder('${f}', event)" data-tooltip="Click to reveal in Finder">${escapeHtml(f)}</span>`).join(',')}
                 </div>
               ` : ''}
 
@@ -1299,8 +1380,8 @@ ${counts.global} global, ${counts.project} project">
       if (status !== 'all') {
         filtered = filtered.filter(m => {
           if (status === 'superseded') return m.status === 'superseded';
-          if (status === 'buried') return m.exclude_from_retrieval === 'true' || m.exclude_from_retrieval === true;
-          if (status === 'active') return m.status !== 'superseded' && m.exclude_from_retrieval !== 'true' && m.exclude_from_retrieval !== true;
+          if (status === 'buried') return m.exclude_from_retrieval === true;
+          if (status === 'active') return m.status !== 'superseded' && !m.exclude_from_retrieval;
           return true;
         });
       }
@@ -1408,13 +1489,13 @@ ${counts.global} global, ${counts.project} project">
         });
         await loadFromDirectory();
 
-        // Start auto-refresh
+        // Start auto-refresh (clear any existing interval first to prevent stacking)
         if (refreshInterval) clearInterval(refreshInterval);
         refreshInterval = setInterval(loadFromDirectory, 30000);
 
       } catch (err) {
         if (err.name !== 'AbortError') {
-          console.error('Error selecting folder:', err);
+          // User cancelled is fine, other errors should alert
           alert('Could not access folder. Try serving this page via HTTP server instead.');
         }
       }
@@ -1466,14 +1547,12 @@ ${counts.global} global, ${counts.project} project">
         renderTimeline();
         applyFilters();
 
-        // Start auto-refresh if not already running
-        if (!refreshInterval) {
-          refreshInterval = setInterval(loadFromServer, 30000);
-        }
+        // Start auto-refresh (clear any existing interval first to prevent stacking)
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(loadFromServer, 30000);
 
-      } catch (err) {
-        console.log('Server load failed, showing folder prompt:', err.message);
-        // Show folder prompt as fallback
+      } catch {
+        // Server load failed - show folder prompt as fallback (expected in dev)
         document.getElementById('folder-prompt').classList.remove('hidden');
       }
     }
@@ -1488,9 +1567,8 @@ ${counts.global} global, ${counts.project} project">
         const content = await response.text();
         document.getElementById('legacy-text').textContent = content;
         document.getElementById('legacy-section').classList.remove('hidden');
-      } catch (err) {
-        console.log('Legacy learnings not available:', err.message);
-        // Keep section hidden if file not found
+      } catch {
+        // Legacy learnings not available - keep section hidden (expected in some setups)
       }
     }
 
