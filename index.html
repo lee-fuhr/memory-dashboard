@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MEMORY BANK // AI Memory Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['JetBrains Mono', 'monospace'],
+            display: ['Space Mono', 'monospace'],
+          },
+          colors: {
+            terminal: {
+              bg: '#0a0a0f',
+              surface: '#12121a',
+              border: '#1e1e2e',
+              muted: '#3a3a4a',
+              text: '#c8c8d0',
+              bright: '#e8e8f0',
+            },
+            mem: {
+              global: '#22d3ee',
+              project: '#fbbf24',
+              active: '#4ade80',
+              superseded: '#6b7280',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background: #0a0a0f;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Scanline effect */
+    .scanlines::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.1) 2px,
+        rgba(0, 0, 0, 0.1) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* Glow effects */
+    .glow-global {
+      box-shadow: 0 0 20px rgba(34, 211, 238, 0.15);
+    }
+    .glow-project {
+      box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
+    }
+
+    /* Memory card hover */
+    .memory-card {
+      transition: all 0.15s ease;
+      border-left: 3px solid transparent;
+    }
+    .memory-card:hover {
+      background: #1a1a24;
+    }
+    .memory-card.global {
+      border-left-color: #22d3ee;
+    }
+    .memory-card.project {
+      border-left-color: #fbbf24;
+    }
+    .memory-card.superseded {
+      opacity: 0.5;
+    }
+    .memory-card.superseded .memory-title {
+      text-decoration: line-through;
+    }
+    .memory-card.buried {
+      opacity: 0.4;
+      border-left-color: #6b7280 !important;
+    }
+    .memory-card.buried::after {
+      content: '🚫 BURIED';
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: 10px;
+      color: #6b7280;
+    }
+    .memory-card {
+      position: relative;
+    }
+
+    /* Control buttons */
+    .memory-controls {
+      display: flex;
+      gap: 4px;
+    }
+    .memory-controls button {
+      padding: 4px 8px;
+      font-size: 11px;
+      border: 1px solid #3a3a4a;
+      background: transparent;
+      color: #c8c8d0;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .memory-controls button:hover {
+      border-color: #22d3ee;
+      color: #22d3ee;
+    }
+    .memory-controls button.promote:hover {
+      border-color: #4ade80;
+      color: #4ade80;
+    }
+    .memory-controls button.demote:hover {
+      border-color: #fbbf24;
+      color: #fbbf24;
+    }
+    .memory-controls button.bury:hover {
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+    .memory-controls button.unbury:hover {
+      border-color: #4ade80;
+      color: #4ade80;
+    }
+    .memory-controls button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* Timeline */
+    .timeline-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .timeline-dot.global {
+      background: #22d3ee;
+      box-shadow: 0 0 8px #22d3ee;
+    }
+    .timeline-dot.project {
+      background: #fbbf24;
+      box-shadow: 0 0 8px #fbbf24;
+    }
+
+    /* Expand animation */
+    .memory-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .memory-card.expanded .memory-content {
+      max-height: 500px;
+    }
+
+    /* Pulse animation for live indicator */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #12121a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #3a3a4a;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4a4a5a;
+    }
+
+    /* Tooltips - smart positioning */
+    [data-tooltip] {
+      position: relative;
+    }
+    [data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      background: linear-gradient(135deg, #1a1a24 0%, #12121a 100%);
+      color: #e8e8f0;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-line;
+      max-width: 260px;
+      min-width: 140px;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+      pointer-events: none;
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+      text-align: left;
+      font-weight: 400;
+      letter-spacing: 0.01em;
+    }
+    [data-tooltip]:hover::after {
+      opacity: 1;
+      visibility: visible;
+    }
+    /* Right-aligned tooltips for right-side elements */
+    [data-tooltip-right]::after {
+      left: auto;
+      right: 0;
+    }
+    /* Bottom tooltips for top elements */
+    [data-tooltip-bottom]::after {
+      bottom: auto;
+      top: calc(100% + 8px);
+    }
+    /* Tooltip arrow */
+    [data-tooltip]::before {
+      content: '';
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 12px;
+      border: 6px solid transparent;
+      border-top-color: rgba(34, 211, 238, 0.3);
+      z-index: 1001;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+    }
+    [data-tooltip]:hover::before {
+      opacity: 1;
+      visibility: visible;
+    }
+    [data-tooltip-right]::before {
+      left: auto;
+      right: 12px;
+    }
+    [data-tooltip-bottom]::before {
+      bottom: auto;
+      top: calc(100% + 4px);
+      border-top-color: transparent;
+      border-bottom-color: rgba(34, 211, 238, 0.3);
+    }
+
+    /* Sort toggle button */
+    .sort-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid #3a3a4a;
+      color: #c8c8d0;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .sort-toggle:hover {
+      border-color: #22d3ee;
+      color: #22d3ee;
+    }
+    .sort-toggle .sort-icon {
+      font-size: 14px;
+      transition: transform 0.2s;
+    }
+    .sort-toggle.by-recency .sort-icon {
+      transform: rotate(180deg);
+    }
+
+    /* Improved tag styling */
+    .tag-btn {
+      font-size: 11px !important;
+      padding: 3px 8px !important;
+      background: rgba(34, 211, 238, 0.15) !important;
+      border: 1px solid rgba(34, 211, 238, 0.4) !important;
+      color: #22d3ee !important;
+    }
+    .tag-btn:hover {
+      background: rgba(34, 211, 238, 0.3) !important;
+      border-color: #22d3ee !important;
+    }
+
+    /* Improved date display */
+    .date-friendly {
+      color: #94a3b8;
+      font-size: 12px;
+    }
+    .domain-tag {
+      color: #64748b;
+      font-size: 11px;
+      padding: 2px 6px;
+      background: rgba(100, 116, 139, 0.2);
+      border-radius: 3px;
+    }
+
+    /* Memory card improvements */
+    .memory-card .importance-bar {
+      letter-spacing: 1px;
+      font-size: 11px;
+    }
+    .memory-card .importance-bar.high { color: #4ade80; }
+    .memory-card .importance-bar.medium { color: #fbbf24; }
+    .memory-card .importance-bar.low { color: #6b7280; }
+
+    /* Superseded timeline */
+    .superseded-timeline {
+      background: rgba(107, 114, 128, 0.1);
+      border-left: 2px solid #6b7280;
+      padding: 12px;
+      margin-top: 12px;
+    }
+    .timeline-entry {
+      display: flex;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(107, 114, 128, 0.2);
+    }
+    .timeline-entry:last-child {
+      border-bottom: none;
+    }
+    .timeline-dot-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .timeline-line {
+      width: 2px;
+      flex: 1;
+      background: #3a3a4a;
+      margin-top: 4px;
+    }
+
+    /* Clickable stat cards */
+    .stat-card {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .stat-card:hover {
+      border-color: rgba(34, 211, 238, 0.5);
+      transform: translateY(-1px);
+    }
+    .stat-card.active {
+      border-color: #22d3ee;
+      box-shadow: 0 0 12px rgba(34, 211, 238, 0.2);
+    }
+    .stat-card.active::after {
+      content: '✓';
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      font-size: 10px;
+      color: #22d3ee;
+    }
+
+    /* Clear filters button */
+    .clear-filters {
+      padding: 4px 10px;
+      font-size: 11px;
+      border: 1px solid #3a3a4a;
+      background: transparent;
+      color: #6b7280;
+      cursor: pointer;
+      transition: all 0.15s;
+      border-radius: 3px;
+    }
+    .clear-filters:hover {
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+    .clear-filters.has-filters {
+      border-color: #22d3ee;
+      color: #22d3ee;
+    }
+
+    /* Clickable links in expanded content */
+    .clickable-link {
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .clickable-link:hover {
+      color: #22d3ee;
+      text-decoration: underline;
+    }
+
+    /* Version diff highlight */
+    .version-diff {
+      background: rgba(251, 191, 36, 0.1);
+      border-left: 2px solid #fbbf24;
+      padding: 8px 12px;
+      margin-top: 8px;
+      font-size: 11px;
+    }
+    .version-diff .diff-label {
+      color: #fbbf24;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    /* Consolidated filter select */
+    .filter-select {
+      background: #12121a;
+      border: 1px solid #3a3a4a;
+      color: #c8c8d0;
+      padding: 6px 28px 6px 10px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      min-width: 120px;
+    }
+    .filter-select:hover {
+      border-color: #22d3ee;
+    }
+    .filter-select:focus {
+      outline: none;
+      border-color: #22d3ee;
+    }
+  </style>
+</head>
+<body class="scanlines min-h-screen text-terminal-text">
+
+  <!-- Header -->
+  <header class="border-b border-terminal-border bg-terminal-surface/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <h1 class="font-display text-lg text-terminal-bright tracking-wider" data-tooltip="memory-ts visualization dashboard&#10;Semantic memory system for Claude Code">
+            <span class="text-mem-global">&gt;</span> MEMORY_BANK
+          </h1>
+          <div class="flex items-center gap-2 text-xs text-terminal-muted" data-tooltip="Connection status&#10;Green = connected to memory-ts API">
+            <span class="w-2 h-2 bg-mem-active rounded-full pulse"></span>
+            <span id="status">SCANNING...</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-4 text-xs">
+          <span id="last-refresh" class="text-terminal-muted" data-tooltip="Last data refresh time&#10;Auto-refreshes every 30 seconds">--:--:--</span>
+          <button onclick="loadMemories()" class="px-3 py-1 border border-terminal-border hover:border-mem-global hover:text-mem-global transition-colors" data-tooltip="Manually refresh memories&#10;Keyboard: Cmd+R">
+            REFRESH
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Stats Bar - Clickable Filters -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+           onclick="toggleStatFilter('all')"
+           data-filter="all"
+           data-tooltip="All memories in memory-ts
+Click to clear all filters">
+        <div class="text-xs text-terminal-muted mb-1">TOTAL</div>
+        <div id="stat-total" class="text-2xl font-bold text-terminal-bright">--</div>
+      </div>
+      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+           onclick="toggleStatFilter('active')"
+           data-filter="active"
+           data-tooltip="Currently in use
+Surfaced when semantically relevant
+Click to filter">
+        <div class="text-xs text-terminal-muted mb-1">ACTIVE</div>
+        <div id="stat-active" class="text-2xl font-bold text-mem-active">--</div>
+      </div>
+      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+           onclick="toggleStatFilter('superseded')"
+           data-filter="superseded"
+           data-tooltip="Replaced by newer versions
+Kept for history, not surfaced
+Click to filter">
+        <div class="text-xs text-terminal-muted mb-1">SUPERSEDED</div>
+        <div id="stat-superseded" class="text-2xl font-bold text-mem-superseded">--</div>
+      </div>
+      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+           onclick="toggleStatFilter('global')"
+           data-filter="global"
+           data-tooltip="Cross-project learnings
+Apply everywhere
+Click to filter">
+        <div class="text-xs text-mem-global mb-1">🌍 GLOBAL</div>
+        <div id="stat-global" class="text-2xl font-bold text-mem-global">--</div>
+      </div>
+      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+           onclick="toggleStatFilter('project')"
+           data-filter="project"
+           data-tooltip="Project-specific context
+Only surfaces in that project
+Click to filter">
+        <div class="text-xs text-mem-project mb-1">📁 PROJECT</div>
+        <div id="stat-project" class="text-2xl font-bold text-mem-project">--</div>
+      </div>
+    </div>
+
+    <!-- Filters Row - Consolidated -->
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <select id="filter-scope" onchange="applyFilters()" class="filter-select">
+        <option value="all">All scopes</option>
+        <option value="global">🌍 Global only</option>
+        <option value="project">📁 Project only</option>
+      </select>
+      <select id="filter-status" onchange="applyFilters()" class="filter-select">
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="buried">Buried</option>
+        <option value="superseded">Superseded</option>
+      </select>
+      <select id="filter-importance" onchange="applyFilters()" class="filter-select">
+        <option value="all">All importance</option>
+        <option value="high">High (8-10)</option>
+        <option value="medium">Medium (4-7)</option>
+        <option value="low">Low (1-3)</option>
+      </select>
+      <select id="filter-domain" onchange="applyFilters()" class="filter-select">
+        <option value="all">All domains</option>
+        <!-- Populated dynamically -->
+      </select>
+      <button id="sort-toggle" onclick="toggleSort()" class="sort-toggle" data-tooltip="Toggle sort order
+Click to switch">
+        <span class="sort-icon">⇅</span>
+        <span id="sort-label">IMPORTANCE</span>
+      </button>
+      <button id="clear-filters" onclick="clearFilters()" class="clear-filters" data-tooltip="Reset all filters">✕ Clear</button>
+      <div class="flex-1 min-w-[180px]">
+        <input
+          type="text"
+          id="search"
+          placeholder="Search memories..."
+          oninput="applyFilters()"
+          class="w-full filter-select"
+          style="min-width: auto; background-image: none; padding-right: 10px;"
+        >
+      </div>
+    </div>
+
+    <!-- Timeline (horizontal, compact) -->
+    <div class="mb-4 bg-terminal-surface border border-terminal-border p-2" data-tooltip="Last 30 days of memory activity&#10;Cyan = global, Yellow = project&#10;Taller bars = more memories that day">
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-terminal-muted">TIMELINE</span>
+        <div id="timeline" class="flex items-end gap-0.5 h-6 flex-1 overflow-x-auto">
+          <!-- Timeline bars injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Memory List -->
+    <div id="memory-list" class="space-y-2">
+      <!-- Memory cards injected by JS -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden text-center py-16">
+      <div class="text-4xl mb-4">🧠</div>
+      <div class="text-terminal-muted text-sm">NO MEMORIES FOUND</div>
+      <div class="text-terminal-muted text-xs mt-2">Memories will appear here after your first session with memory-ts</div>
+    </div>
+
+    <!-- Legacy Learnings Section -->
+    <div id="legacy-section" class="mt-8 hidden">
+      <div class="flex items-center gap-3 mb-4">
+        <h2 class="text-sm text-terminal-bright font-medium">📚 LEGACY LEARNINGS</h2>
+        <span class="text-xs text-terminal-muted">(universal-learnings.md)</span>
+        <button onclick="toggleLegacy()" class="ml-auto text-xs px-2 py-1 border border-terminal-border hover:border-mem-project text-terminal-muted hover:text-mem-project">
+          TOGGLE
+        </button>
+      </div>
+      <div id="legacy-content" class="bg-terminal-surface border border-terminal-border border-l-mem-project border-l-3 p-4 max-h-96 overflow-y-auto">
+        <pre id="legacy-text" class="text-sm text-terminal-text whitespace-pre-wrap font-mono"></pre>
+      </div>
+    </div>
+
+    <!-- Load from folder button (for File System Access API) -->
+    <div id="folder-prompt" class="text-center py-16">
+      <div class="text-4xl mb-4">📂</div>
+      <div class="text-terminal-muted text-sm mb-4">SELECT MEMORY STORAGE FOLDER</div>
+      <button onclick="selectFolder()" class="px-4 py-2 bg-mem-global/20 border border-mem-global text-mem-global hover:bg-mem-global/30 transition-colors">
+        OPEN ~/.local/share/memory/
+      </button>
+      <div class="text-terminal-muted text-xs mt-4">
+        Or serve this file via HTTP server to auto-load
+      </div>
+      <div class="mt-6 text-left max-w-md mx-auto bg-terminal-surface border border-terminal-border p-4">
+        <div class="text-xs text-terminal-muted mb-2">QUICK START:</div>
+        <code class="text-xs text-mem-global block">cd ~/Sites/lfi-tools/memory-dashboard</code>
+        <code class="text-xs text-mem-global block">python3 -m http.server 8765</code>
+        <code class="text-xs text-mem-global block mt-2">open http://localhost:8765</code>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-terminal-border mt-8 py-4 text-center text-xs text-terminal-muted" data-tooltip="Built for memory-ts integration&#10;Hover elements for tooltips">
+    MEMORY_BANK v2.1 // memory-ts dashboard // clickable stats + domain filter + version history + finder/warp integration
+  </footer>
+
+  <script>
+    // State
+    let memories = [];
+    let directoryHandle = null;
+    let refreshInterval = null;
+    const MEMORY_API = 'http://localhost:8765';
+
+    // Update memory via API
+    async function updateMemory(memoryId, updates) {
+      try {
+        const response = await fetch(`${MEMORY_API}/memory/${memoryId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: 'LFI',
+            ...updates
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          // Refresh memories to show updated state
+          loadMemories();
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.error('Update failed:', err);
+        alert(`Update failed: ${err.message}`);
+        return false;
+      }
+    }
+
+    // Memory control actions
+    async function promoteMemory(memoryId, currentImportance, event) {
+      event.stopPropagation();
+      const currentWeight = (currentImportance || 5) / 10;
+      const newWeight = Math.min(1.0, currentWeight + 0.1);
+      await updateMemory(memoryId, { importance_weight: newWeight });
+    }
+
+    async function demoteMemory(memoryId, currentImportance, event) {
+      event.stopPropagation();
+      const currentWeight = (currentImportance || 5) / 10;
+      const newWeight = Math.max(0.1, currentWeight - 0.1);
+      await updateMemory(memoryId, { importance_weight: newWeight });
+    }
+
+    async function buryMemory(memoryId, event) {
+      event.stopPropagation();
+      await updateMemory(memoryId, { exclude_from_retrieval: true });
+    }
+
+    async function unburyMemory(memoryId, event) {
+      event.stopPropagation();
+      await updateMemory(memoryId, { exclude_from_retrieval: false });
+    }
+
+    async function archiveMemory(memoryId, event) {
+      event.stopPropagation();
+      await updateMemory(memoryId, { status: 'archived' });
+    }
+
+    // Filter by clicking a tag
+    function filterByTag(tag, event) {
+      event.stopPropagation();
+      const searchInput = document.getElementById('search');
+      searchInput.value = '#' + tag;
+      applyFilters();
+    }
+
+    // Parse YAML frontmatter from markdown
+    function parseMemoryFile(content, filename) {
+      const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      if (!match) return null;
+
+      const frontmatter = match[1];
+      const body = match[2].trim();
+
+      // Simple YAML parser for our known fields
+      const memory = { body, filename };
+      const lines = frontmatter.split('\n');
+
+      for (const line of lines) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx === -1) continue;
+
+        const key = line.substring(0, colonIdx).trim();
+        let value = line.substring(colonIdx + 1).trim();
+
+        // Remove quotes
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+
+        // Parse arrays
+        if (value.startsWith('[') && value.endsWith(']')) {
+          value = value.slice(1, -1).split(',').map(s => s.trim().replace(/['"]/g, ''));
+        }
+
+        // Parse numbers
+        if (key === 'importance' && !isNaN(value)) {
+          value = parseInt(value);
+        }
+
+        // Parse booleans
+        if (value === 'true') value = true;
+        if (value === 'false') value = false;
+
+        memory[key] = value;
+      }
+
+      // Memory-ts format handling:
+      // Convert unix timestamp (ms) to ISO string
+      if (memory.created && !isNaN(memory.created)) {
+        memory.created = new Date(parseInt(memory.created)).toISOString();
+      }
+
+      // Use reasoning field as title (no truncation), fallback to first sentence
+      if (!memory.title) {
+        memory.title = memory.reasoning || (body ? body.split(/[.!?\n]/)[0].trim() : 'Untitled');
+      }
+
+      // Map importance_weight (0-1) to importance (1-10)
+      if (memory.importance_weight !== undefined) {
+        memory.importance = Math.round(parseFloat(memory.importance_weight) * 10);
+      }
+
+      // Convert "null" strings to actual null
+      if (memory.superseded_by === 'null') memory.superseded_by = null;
+      if (memory.feature === 'null') memory.feature = null;
+
+      return memory;
+    }
+
+    // Format date for display
+    function formatDate(dateStr) {
+      if (!dateStr) return '--';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    // Format relative time
+    function relativeTime(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diff = now - date;
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const mins = Math.floor(diff / (1000 * 60));
+
+      if (days > 0) return `${days}d ago`;
+      if (hours > 0) return `${hours}h ago`;
+      if (mins > 0) return `${mins}m ago`;
+      return 'just now';
+    }
+
+    // Sort state
+    let sortByImportance = true;
+
+    // Toggle sort between importance and recency
+    function toggleSort() {
+      sortByImportance = !sortByImportance;
+      const btn = document.getElementById('sort-toggle');
+      const label = document.getElementById('sort-label');
+
+      if (sortByImportance) {
+        label.textContent = 'IMPORTANCE';
+        btn.classList.remove('by-recency');
+      } else {
+        label.textContent = 'RECENCY';
+        btn.classList.add('by-recency');
+      }
+
+      applyFilters();
+    }
+
+    // Clear all filters
+    function clearFilters() {
+      document.getElementById('filter-scope').value = 'all';
+      document.getElementById('filter-status').value = 'all';
+      document.getElementById('filter-importance').value = 'all';
+      document.getElementById('filter-domain').value = 'all';
+      document.getElementById('search').value = '';
+
+      // Clear stat card active states
+      document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active'));
+
+      updateClearButton();
+      applyFilters();
+    }
+
+    // Update clear button state
+    function updateClearButton() {
+      const hasFilters =
+        document.getElementById('filter-scope').value !== 'all' ||
+        document.getElementById('filter-status').value !== 'all' ||
+        document.getElementById('filter-importance').value !== 'all' ||
+        document.getElementById('filter-domain').value !== 'all' ||
+        document.getElementById('search').value !== '';
+
+      const btn = document.getElementById('clear-filters');
+      if (hasFilters) {
+        btn.classList.add('has-filters');
+      } else {
+        btn.classList.remove('has-filters');
+      }
+    }
+
+    // Toggle filter from stat card click
+    function toggleStatFilter(filter) {
+      const card = document.querySelector(`[data-filter="${filter}"]`);
+      const isActive = card.classList.contains('active');
+
+      // Clear all active states
+      document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+
+      if (filter === 'all' || isActive) {
+        // Clear filters
+        clearFilters();
+      } else {
+        // Apply filter
+        card.classList.add('active');
+
+        if (filter === 'active' || filter === 'superseded') {
+          document.getElementById('filter-status').value = filter;
+          document.getElementById('filter-scope').value = 'all';
+        } else if (filter === 'global' || filter === 'project') {
+          document.getElementById('filter-scope').value = filter;
+          document.getElementById('filter-status').value = 'all';
+        }
+
+        updateClearButton();
+        applyFilters();
+      }
+    }
+
+    // Filter by domain (click on domain tag)
+    function filterByDomain(domain, event) {
+      event.stopPropagation();
+      document.getElementById('filter-domain').value = domain;
+      updateClearButton();
+      applyFilters();
+    }
+
+    // Open session in Warp terminal
+    function openSessionInWarp(sessionId, event) {
+      event.stopPropagation();
+      // Warp doesn't have a direct session resume, but we can try to use claude --resume
+      const cmd = `claude --resume "${sessionId}"`;
+      // Try to open Warp with the command
+      // This will copy to clipboard and alert user since direct execution isn't possible from browser
+      navigator.clipboard.writeText(cmd).then(() => {
+        alert(`Copied to clipboard:\\n${cmd}\\n\\nPaste in Warp to resume this session.`);
+      }).catch(() => {
+        prompt('Copy this command to resume in Warp:', cmd);
+      });
+    }
+
+    // Reveal file in Finder
+    function revealInFinder(filePath, event) {
+      event.stopPropagation();
+      // Expand ~ to home directory
+      const expandedPath = filePath.replace(/^~/, '/Users/lee');
+      // Try to use the dashboard server API
+      fetch('http://localhost:8701/api/reveal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: expandedPath })
+      }).catch(() => {
+        // Fallback: copy path to clipboard
+        navigator.clipboard.writeText(expandedPath).then(() => {
+          alert(`Path copied to clipboard:\\n${expandedPath}`);
+        });
+      });
+    }
+
+    // Populate domain filter dropdown
+    function populateDomainFilter() {
+      const domains = new Set();
+      memories.forEach(mem => {
+        const domain = mem.domain || mem.knowledge_domain;
+        if (domain) domains.add(domain);
+      });
+
+      const select = document.getElementById('filter-domain');
+      const currentValue = select.value;
+
+      // Keep first option
+      select.innerHTML = '<option value="all">All domains</option>';
+
+      // Add sorted domains
+      Array.from(domains).sort().forEach(domain => {
+        const option = document.createElement('option');
+        option.value = domain;
+        option.textContent = domain;
+        select.appendChild(option);
+      });
+
+      // Restore selection if still valid
+      if (currentValue !== 'all' && domains.has(currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    // Build superseded timeline HTML
+    function buildSupersededTimeline(mem) {
+      // Find related memories in the supersession chain
+      const chain = [];
+
+      // Look for memories this one superseded
+      const supersededIds = mem.supersedes ? (Array.isArray(mem.supersedes) ? mem.supersedes : [mem.supersedes]) : [];
+
+      // Look for the memory that superseded this one
+      const supersededBy = mem.superseded_by;
+
+      // If this memory has no supersession relationships, return empty
+      if (!supersededIds.length && !supersededBy) {
+        return '';
+      }
+
+      // Build the chain
+      supersededIds.forEach(id => {
+        const found = memories.find(m => m.id === id);
+        if (found) {
+          chain.push({ type: 'previous', memory: found });
+        }
+      });
+
+      if (supersededBy) {
+        const found = memories.find(m => m.id === supersededBy);
+        if (found) {
+          chain.push({ type: 'replaced_by', memory: found });
+        }
+      }
+
+      if (chain.length === 0) {
+        // Just show the ID reference as clickable if we can't find the actual memory
+        if (supersededBy) {
+          return `
+            <div class="superseded-timeline border-t border-terminal-border pt-3 mt-3">
+              <div class="text-xs text-terminal-muted mb-2">📜 VERSION HISTORY</div>
+              <div class="text-xs text-mem-superseded">
+                <span class="text-terminal-muted">Replaced by:</span>
+                <span class="clickable-link" onclick="scrollToMemory('${supersededBy}', event)">${supersededBy.slice(0, 12)}...</span>
+              </div>
+            </div>
+          `;
+        }
+        return '';
+      }
+
+      // Build timeline HTML
+      let timelineHtml = `
+        <div class="superseded-timeline border-t border-terminal-border pt-3 mt-3">
+          <div class="text-xs text-terminal-muted mb-3">📜 VERSION HISTORY</div>
+      `;
+
+      // Sort chain by date (oldest first)
+      chain.sort((a, b) => new Date(a.memory.created || 0) - new Date(b.memory.created || 0));
+
+      chain.forEach((entry, idx) => {
+        const m = entry.memory;
+        const isLast = idx === chain.length - 1;
+        const typeLabel = entry.type === 'previous' ? 'Previous version' : 'Current version';
+        const typeIcon = entry.type === 'previous' ? '◀' : '▶';
+        const typeColor = entry.type === 'previous' ? 'text-mem-superseded' : 'text-mem-global';
+
+        // Try to determine what changed
+        const whatChanged = getVersionDiff(mem, m, entry.type);
+
+        timelineHtml += `
+          <div class="timeline-entry clickable-link" onclick="scrollToMemory('${m.id}', event)" data-tooltip="Click to jump to this memory">
+            <div class="timeline-dot-container">
+              <div class="timeline-dot ${m.scope === 'global' ? 'global' : 'project'}"></div>
+              ${!isLast ? '<div class="timeline-line"></div>' : ''}
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="${typeColor} text-xs font-medium">${typeIcon} ${typeLabel}</span>
+                <span class="text-terminal-muted text-xs">${relativeTime(m.created)}</span>
+              </div>
+              <div class="text-sm text-terminal-text mb-1">${m.title || m.reasoning || 'Untitled'}</div>
+              ${whatChanged ? `
+                <div class="version-diff">
+                  <div class="diff-label">What changed:</div>
+                  <div class="text-terminal-text">${whatChanged}</div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      });
+
+      timelineHtml += '</div>';
+      return timelineHtml;
+    }
+
+    // Try to determine what changed between versions
+    function getVersionDiff(currentMem, otherMem, relationship) {
+      const diffs = [];
+
+      if (relationship === 'previous') {
+        // Comparing current to previous
+        if (currentMem.importance !== otherMem.importance) {
+          const dir = currentMem.importance > otherMem.importance ? 'increased' : 'decreased';
+          diffs.push(`Importance ${dir} (${otherMem.importance} → ${currentMem.importance})`);
+        }
+        if (currentMem.title !== otherMem.title && currentMem.reasoning !== otherMem.reasoning) {
+          diffs.push('Updated reasoning/title');
+        }
+        if (currentMem.body !== otherMem.body) {
+          diffs.push('Content refined');
+        }
+        if (JSON.stringify(currentMem.semantic_tags) !== JSON.stringify(otherMem.semantic_tags)) {
+          diffs.push('Tags updated');
+        }
+      } else {
+        // This memory was replaced - show why the new one is better
+        if (otherMem.importance > currentMem.importance) {
+          diffs.push(`Higher importance (${currentMem.importance} → ${otherMem.importance})`);
+        }
+        if (otherMem.body && currentMem.body && otherMem.body.length > currentMem.body.length) {
+          diffs.push('More detailed content');
+        }
+      }
+
+      return diffs.length > 0 ? diffs.join(' · ') : null;
+    }
+
+    // Scroll to a memory by ID
+    function scrollToMemory(memoryId, event) {
+      event.stopPropagation();
+      const card = document.querySelector(`[data-memory-id="${memoryId}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('expanded');
+        // Brief highlight
+        card.style.boxShadow = '0 0 20px rgba(34, 211, 238, 0.4)';
+        setTimeout(() => card.style.boxShadow = '', 2000);
+      }
+    }
+
+    // Render memory card
+    function renderMemory(mem) {
+      const scopeClass = mem.scope === 'global' ? 'global' : 'project';
+      const statusClass = mem.status === 'superseded' ? 'superseded' : '';
+      const buriedClass = (mem.exclude_from_retrieval === 'true' || mem.exclude_from_retrieval === true) ? 'buried' : '';
+      const scopeIcon = mem.scope === 'global' ? '🌍' : '📁';
+      const scopeColor = mem.scope === 'global' ? 'text-mem-global' : 'text-mem-project';
+      const scopeLabel = mem.scope === 'global' ? 'Global' : 'Project';
+      const importance = mem.importance || 5;
+
+      // Importance color classes
+      const impLevel = importance >= 8 ? 'high' : importance >= 4 ? 'medium' : 'low';
+      const impColor = importance >= 8 ? 'text-mem-active' : importance >= 4 ? 'text-mem-project' : 'text-terminal-muted';
+      const impGlow = importance >= 8 ? 'border-l-mem-active' : importance >= 4 ? 'border-l-mem-project' : '';
+      const impLabel = importance >= 8 ? 'High priority' : importance >= 4 ? 'Medium priority' : 'Low priority';
+
+      // Visual bar with 10 segments
+      const filledBars = Math.round(importance);
+      const importanceBars = '▰'.repeat(filledBars) + '▱'.repeat(10 - filledBars);
+
+      // Friendly date with full timestamp for tooltip
+      const friendlyDate = relativeTime(mem.created);
+      const fullDate = mem.created ? new Date(mem.created).toLocaleString('en-US', {
+        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      }) : 'Unknown date';
+
+      // Domain display
+      const domain = mem.domain || mem.knowledge_domain;
+
+      // Build superseded timeline if this memory supersedes others or has been superseded
+      const supersededTimeline = buildSupersededTimeline(mem);
+
+      return `
+        <div class="memory-card ${scopeClass} ${statusClass} ${buriedClass} imp-${impLevel} bg-terminal-surface border border-terminal-border ${impGlow} border-l-2 cursor-pointer" data-memory-id="${mem.id}" onclick="toggleExpand(this)">
+          <div class="p-4">
+            <!-- Top row: Importance bar + date/domain + expand icon -->
+            <div class="flex items-center justify-between mb-2 gap-3">
+              <span class="importance-bar ${impLevel}" data-tooltip="${impLabel}
+Score: ${importance}/10">${importanceBars}</span>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="date-friendly" data-tooltip="${fullDate}">${friendlyDate}</span>
+                ${domain ? `<span class="domain-tag clickable-link" onclick="filterByDomain('${domain}', event)" data-tooltip="Knowledge domain
+Click to filter by ${domain}">${domain}</span>` : ''}
+              </div>
+              <span class="text-terminal-muted text-xs">▼</span>
+            </div>
+
+            <!-- Title row with scope icon -->
+            <div class="flex items-start gap-2 mb-2">
+              <span class="${scopeColor}" data-tooltip="${scopeLabel} memory
+${mem.scope === 'global' ? 'Applies across all projects' : 'Only surfaces in this project'}">${scopeIcon}</span>
+              <span class="memory-title text-terminal-bright font-medium leading-snug flex-1">${mem.title || 'Untitled'}</span>
+              ${mem.status === 'superseded' ? '<span class="text-xs text-mem-superseded" data-tooltip="Replaced by newer version">[SUPERSEDED]</span>' : ''}
+            </div>
+
+            <!-- Memory Controls - left aligned under text -->
+            <div class="flex items-center gap-2 ml-6" onclick="event.stopPropagation()">
+              <button class="promote px-2 py-1 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
+                      onclick="promoteMemory('${mem.id}', ${importance}, event)"
+                      data-tooltip="Boost importance +1"
+                      ${importance >= 10 ? 'disabled' : ''}>⬆</button>
+              <button class="demote px-2 py-1 text-xs border border-terminal-border hover:border-mem-project hover:text-mem-project transition-colors"
+                      onclick="demoteMemory('${mem.id}', ${importance}, event)"
+                      data-tooltip="Lower importance -1"
+                      ${importance <= 1 ? 'disabled' : ''}>⬇</button>
+              ${mem.exclude_from_retrieval === 'true' || mem.exclude_from_retrieval === true
+                ? `<button class="unbury px-2 py-1 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
+                          onclick="unburyMemory('${mem.id}', event)"
+                          data-tooltip="Unbury this memory">👁</button>`
+                : `<button class="bury px-2 py-1 text-xs border border-terminal-border hover:border-red-500 hover:text-red-500 transition-colors"
+                          onclick="buryMemory('${mem.id}', event)"
+                          data-tooltip="Bury from retrieval">🚫</button>`
+              }
+            </div>
+          </div>
+          <div class="memory-content border-t border-terminal-border">
+            <div class="p-4 space-y-3">
+              <!-- Tags -->
+              ${mem.semantic_tags && mem.semantic_tags.length ? `
+                <div class="flex flex-wrap gap-1.5" data-tooltip="Click a tag to filter&#10;Semantic tags for retrieval matching">
+                  ${mem.semantic_tags.map(t => `<button onclick="filterByTag('${t}', event)" class="tag-btn text-xs px-2 py-1 bg-mem-global/20 text-mem-global border border-mem-global/30 rounded hover:bg-mem-global/40 hover:border-mem-global transition-colors cursor-pointer">#${t}</button>`).join('')}
+                </div>
+              ` : ''}
+
+              <!-- Body content -->
+              <pre class="text-sm text-terminal-text whitespace-pre-wrap font-mono leading-relaxed">${mem.body || 'No content'}</pre>
+
+              <!-- Project context -->
+              ${mem.project_id || mem.project_path ? `
+                <div class="text-xs bg-terminal-border/30 p-2 rounded" data-tooltip="Project where this memory was captured">
+                  <span class="text-terminal-muted">📂 Source:</span>
+                  <span class="text-mem-project font-medium">${mem.project_id || 'unknown'}</span>
+                  ${mem.project_path ? `<span class="text-terminal-muted ml-2 font-mono text-[10px]">${mem.project_path}</span>` : ''}
+                </div>
+              ` : ''}
+
+              <!-- Metadata grid -->
+              <div class="grid grid-cols-2 gap-2 text-xs border-t border-terminal-border pt-3 mt-3">
+                ${mem.context_type ? `<div data-tooltip="Context type
+technical, personal, procedural"><span class="text-terminal-muted">Context:</span> <span class="text-terminal-text">${mem.context_type}</span></div>` : ''}
+                ${mem.temporal_relevance ? `<div data-tooltip="Relevance duration
+persistent, temporary, time-bound"><span class="text-terminal-muted">Temporal:</span> <span class="text-terminal-text">${mem.temporal_relevance}</span></div>` : ''}
+                ${mem.confidence_score ? `<div data-tooltip="Claude's confidence
+when capturing this memory"><span class="text-terminal-muted">Confidence:</span> <span class="text-terminal-text">${Math.round(parseFloat(mem.confidence_score) * 100)}%</span></div>` : ''}
+                ${mem.session_id ? `<div data-tooltip="Click to open session in Warp
+Session where memory was captured"><span class="text-terminal-muted">Session:</span> <span class="text-terminal-text font-mono text-[10px] clickable-link" onclick="openSessionInWarp('${mem.session_id}', event)">${mem.session_id.slice(0, 8)}...</span></div>` : ''}
+                ${mem.action_required === 'true' || mem.action_required === true ? `<div data-tooltip="Follow-up action needed"><span class="text-mem-project">⚡ Action required</span></div>` : ''}
+                ${mem.awaiting_decision === 'true' || mem.awaiting_decision === true ? `<div data-tooltip="Waiting for your input"><span class="text-mem-global">⏳ Awaiting decision</span></div>` : ''}
+              </div>
+
+              <!-- Trigger phrases -->
+              ${mem.trigger_phrases && mem.trigger_phrases.length ? `
+                <div class="text-xs border-t border-terminal-border pt-3" data-tooltip="Semantic matching keywords">
+                  <span class="text-terminal-muted">Triggers:</span>
+                  <span class="text-terminal-text">${mem.trigger_phrases.join(', ')}</span>
+                </div>
+              ` : ''}
+
+              <!-- Related files - clickable -->
+              ${mem.related_files && mem.related_files.length ? `
+                <div class="text-xs border-t border-terminal-border pt-3">
+                  <span class="text-terminal-muted">Files:</span>
+                  ${mem.related_files.map(f => `<span class="text-terminal-text font-mono clickable-link ml-1" onclick="revealInFinder('${f}', event)" data-tooltip="Click to reveal in Finder">${f}</span>`).join(',')}
+                </div>
+              ` : ''}
+
+              ${supersededTimeline}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Toggle memory expansion
+    function toggleExpand(el) {
+      el.classList.toggle('expanded');
+    }
+
+    // Update stats
+    function updateStats() {
+      const total = memories.length;
+      const active = memories.filter(m => m.status !== 'superseded').length;
+      const superseded = memories.filter(m => m.status === 'superseded').length;
+      const global = memories.filter(m => m.scope === 'global').length;
+      const project = memories.filter(m => m.scope === 'project').length;
+
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-active').textContent = active;
+      document.getElementById('stat-superseded').textContent = superseded;
+      document.getElementById('stat-global').textContent = global;
+      document.getElementById('stat-project').textContent = project;
+    }
+
+    // Render timeline
+    function renderTimeline() {
+      const container = document.getElementById('timeline');
+      const now = new Date();
+      const days = 30;
+      const maxBarHeight = 24; // pixels
+
+      // Group memories by day
+      const byDay = {};
+      for (let i = 0; i < days; i++) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const key = date.toISOString().split('T')[0];
+        byDay[key] = { global: 0, project: 0 };
+      }
+
+      memories.forEach(mem => {
+        if (!mem.created) return;
+        const key = mem.created.split('T')[0];
+        if (byDay[key]) {
+          if (mem.scope === 'global') byDay[key].global++;
+          else byDay[key].project++;
+        }
+      });
+
+      const maxCount = Math.max(1, ...Object.values(byDay).map(d => d.global + d.project));
+
+      container.innerHTML = Object.entries(byDay)
+        .reverse()
+        .map(([date, counts]) => {
+          const total = counts.global + counts.project;
+          const totalHeight = Math.max(2, (total / maxCount) * maxBarHeight);
+          const globalHeight = counts.global ? Math.round((counts.global / total) * totalHeight) : 0;
+          const projectHeight = counts.project ? Math.round((counts.project / total) * totalHeight) : 0;
+
+          const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+          return `
+            <div class="flex flex-col items-end justify-end" style="height: ${maxBarHeight}px" data-tooltip="${formattedDate}
+${counts.global} global, ${counts.project} project">
+              ${projectHeight > 0 ? `<div class="w-1.5 bg-mem-project rounded-t-sm" style="height: ${projectHeight}px"></div>` : ''}
+              ${globalHeight > 0 ? `<div class="w-1.5 bg-mem-global ${projectHeight > 0 ? '' : 'rounded-t-sm'}" style="height: ${globalHeight}px"></div>` : ''}
+              ${total === 0 ? `<div class="w-1.5 bg-terminal-border/30 rounded-t-sm" style="height: 2px"></div>` : ''}
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    // Apply filters
+    function applyFilters() {
+      const scope = document.getElementById('filter-scope').value;
+      const status = document.getElementById('filter-status').value;
+      const importance = document.getElementById('filter-importance').value;
+      const domain = document.getElementById('filter-domain').value;
+      const search = document.getElementById('search').value.toLowerCase();
+
+      let filtered = memories;
+
+      if (scope !== 'all') {
+        filtered = filtered.filter(m => m.scope === scope);
+      }
+
+      if (status !== 'all') {
+        filtered = filtered.filter(m => {
+          if (status === 'superseded') return m.status === 'superseded';
+          if (status === 'buried') return m.exclude_from_retrieval === 'true' || m.exclude_from_retrieval === true;
+          if (status === 'active') return m.status !== 'superseded' && m.exclude_from_retrieval !== 'true' && m.exclude_from_retrieval !== true;
+          return true;
+        });
+      }
+
+      if (importance !== 'all') {
+        filtered = filtered.filter(m => {
+          const imp = m.importance || 5;
+          if (importance === 'high') return imp >= 8;
+          if (importance === 'medium') return imp >= 4 && imp < 8;
+          if (importance === 'low') return imp < 4;
+          return true;
+        });
+      }
+
+      if (domain !== 'all') {
+        filtered = filtered.filter(m => {
+          const memDomain = m.domain || m.knowledge_domain;
+          return memDomain === domain;
+        });
+      }
+
+      if (search) {
+        // Handle #tag search
+        if (search.startsWith('#')) {
+          const tagSearch = search.slice(1).toLowerCase();
+          filtered = filtered.filter(m =>
+            (m.semantic_tags || []).some(t => t.toLowerCase().includes(tagSearch))
+          );
+        } else {
+          filtered = filtered.filter(m =>
+            (m.title || '').toLowerCase().includes(search) ||
+            (m.body || '').toLowerCase().includes(search) ||
+            (m.semantic_tags || []).some(t => t.toLowerCase().includes(search))
+          );
+        }
+      }
+
+      // Sort based on toggle state
+      filtered.sort((a, b) => {
+        if (sortByImportance) {
+          // Importance first, then recency as tiebreaker
+          const impDiff = (b.importance || 5) - (a.importance || 5);
+          if (impDiff !== 0) return impDiff;
+          return new Date(b.created || 0) - new Date(a.created || 0);
+        } else {
+          // Recency first (most recent)
+          return new Date(b.created || 0) - new Date(a.created || 0);
+        }
+      });
+
+      updateClearButton();
+      renderMemories(filtered);
+    }
+
+    // Render memory list
+    function renderMemories(mems) {
+      const container = document.getElementById('memory-list');
+      const emptyState = document.getElementById('empty-state');
+
+      if (mems.length === 0) {
+        container.innerHTML = '';
+        emptyState.classList.remove('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        container.innerHTML = mems.map(renderMemory).join('');
+      }
+    }
+
+    // Load memories from directory handle
+    async function loadFromDirectory() {
+      if (!directoryHandle) return;
+
+      memories = [];
+
+      try {
+        for await (const entry of directoryHandle.values()) {
+          if (entry.kind === 'file' && entry.name.endsWith('.md')) {
+            const file = await entry.getFile();
+            const content = await file.text();
+            const mem = parseMemoryFile(content, entry.name);
+            if (mem) memories.push(mem);
+          }
+        }
+
+        document.getElementById('status').textContent = `LOADED ${memories.length} MEMORIES`;
+        document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+        document.getElementById('folder-prompt').classList.add('hidden');
+
+        updateStats();
+        populateDomainFilter();
+        renderTimeline();
+        applyFilters();
+
+      } catch (err) {
+        console.error('Error loading memories:', err);
+        document.getElementById('status').textContent = 'ERROR: ' + err.message;
+      }
+    }
+
+    // Select folder using File System Access API
+    async function selectFolder() {
+      try {
+        directoryHandle = await window.showDirectoryPicker({
+          mode: 'read'
+        });
+        await loadFromDirectory();
+
+        // Start auto-refresh
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(loadFromDirectory, 30000);
+
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error('Error selecting folder:', err);
+          alert('Could not access folder. Try serving this page via HTTP server instead.');
+        }
+      }
+    }
+
+    // Load memories (for auto-refresh)
+    function loadMemories() {
+      if (directoryHandle) {
+        loadFromDirectory();
+      } else {
+        loadFromServer();
+      }
+    }
+
+    // Load memories from HTTP server (via symlink)
+    async function loadFromServer() {
+      try {
+        // Fetch directory listing
+        const response = await fetch('/memories/');
+        if (!response.ok) {
+          throw new Error('Could not access /memories/');
+        }
+
+        const html = await response.text();
+        // Parse directory listing for .md files
+        const fileMatches = html.matchAll(/href="([^"]+\.md)"/g);
+        const files = [...fileMatches].map(m => m[1]);
+
+        memories = [];
+        for (const file of files) {
+          try {
+            const fileResponse = await fetch(`/memories/${file}`);
+            if (fileResponse.ok) {
+              const content = await fileResponse.text();
+              const mem = parseMemoryFile(content, file);
+              if (mem) memories.push(mem);
+            }
+          } catch (e) {
+            console.warn(`Could not load ${file}:`, e);
+          }
+        }
+
+        document.getElementById('status').textContent = `LOADED ${memories.length} MEMORIES`;
+        document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+        document.getElementById('folder-prompt').classList.add('hidden');
+
+        updateStats();
+        populateDomainFilter();
+        renderTimeline();
+        applyFilters();
+
+        // Start auto-refresh if not already running
+        if (!refreshInterval) {
+          refreshInterval = setInterval(loadFromServer, 30000);
+        }
+
+      } catch (err) {
+        console.log('Server load failed, showing folder prompt:', err.message);
+        // Show folder prompt as fallback
+        document.getElementById('folder-prompt').classList.remove('hidden');
+      }
+    }
+
+    // Load legacy learnings from universal-learnings.md
+    let legacyVisible = true;
+    async function loadLegacyLearnings() {
+      try {
+        const response = await fetch('/legacy/universal-learnings.md');
+        if (!response.ok) throw new Error('Could not load legacy file');
+
+        const content = await response.text();
+        document.getElementById('legacy-text').textContent = content;
+        document.getElementById('legacy-section').classList.remove('hidden');
+      } catch (err) {
+        console.log('Legacy learnings not available:', err.message);
+        // Keep section hidden if file not found
+      }
+    }
+
+    function toggleLegacy() {
+      const content = document.getElementById('legacy-content');
+      legacyVisible = !legacyVisible;
+      content.style.display = legacyVisible ? 'block' : 'none';
+    }
+
+    // Demo data for testing
+    function loadDemoData() {
+      memories = [
+        {
+          id: 'demo-1',
+          title: 'User prefers sentence case for all content',
+          created: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+          scope: 'global',
+          status: 'active',
+          importance: 9,
+          tags: ['formatting', 'style'],
+          body: 'Lee consistently requests sentence case for titles, headings, filenames, and all content. No title case, no exceptions. This is a strong preference that should be applied automatically.'
+        },
+        {
+          id: 'demo-2',
+          title: 'Docker MCP servers should load dynamically',
+          created: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+          scope: 'global',
+          status: 'active',
+          importance: 8,
+          tags: ['mcp', 'docker', 'performance'],
+          body: 'Use mcp-find and mcp-add to load Docker MCP servers on-demand rather than keeping them always-on. This prevents context bloat (was 83K tokens with 17 servers).'
+        },
+        {
+          id: 'demo-3',
+          title: 'Cogent Analytics prefers formal tone',
+          created: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
+          scope: 'project',
+          project: 'Cogent Analytics',
+          status: 'active',
+          importance: 7,
+          tags: ['voice', 'client'],
+          body: 'Cogent Analytics stakeholders prefer more formal, corporate-friendly language in deliverables. Avoid overly casual phrasing.'
+        },
+        {
+          id: 'demo-4',
+          title: 'Use lfi_integrations.py for Todoist',
+          created: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
+          scope: 'global',
+          status: 'superseded',
+          superseded_by: 'demo-5',
+          importance: 6,
+          tags: ['todoist', 'api'],
+          body: 'Original guidance to use lfi_integrations.py exclusively for Todoist operations.'
+        },
+        {
+          id: 'demo-5',
+          title: 'Todoist: Use lfi_integrations.py with new create command',
+          created: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+          scope: 'global',
+          status: 'active',
+          importance: 8,
+          tags: ['todoist', 'api'],
+          body: 'lfi_integrations.py now supports task creation via CLI: ./venv/bin/python3 lfi_integrations.py todoist create "task" --due "tomorrow" --project "My work"'
+        }
+      ];
+
+      document.getElementById('status').textContent = 'DEMO MODE';
+      document.getElementById('folder-prompt').classList.add('hidden');
+
+      updateStats();
+      renderTimeline();
+      applyFilters();
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      // Try loading from server first (works when served via HTTP with symlink)
+      loadFromServer();
+
+      // Load legacy learnings for comparison
+      loadLegacyLearnings();
+
+      // Add keyboard shortcut for refresh
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'r' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          loadMemories();
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>
