@@ -226,15 +226,25 @@
       opacity: 1;
       visibility: visible;
     }
-    /* Right-aligned tooltips for right-side elements */
-    [data-tooltip-right]::after {
+    /* Bottom tooltips for top elements (class-based) */
+    .tooltip-bottom[data-tooltip]::after {
+      bottom: auto;
+      top: calc(100% + 8px);
+    }
+    .tooltip-bottom[data-tooltip]::before {
+      bottom: auto;
+      top: calc(100% + 4px);
+      border-top-color: transparent;
+      border-bottom-color: rgba(34, 211, 238, 0.3);
+    }
+    /* Right-aligned tooltips */
+    .tooltip-right[data-tooltip]::after {
       left: auto;
       right: 0;
     }
-    /* Bottom tooltips for top elements */
-    [data-tooltip-bottom]::after {
-      bottom: auto;
-      top: calc(100% + 8px);
+    .tooltip-right[data-tooltip]::before {
+      left: auto;
+      right: 12px;
     }
     /* Tooltip arrow */
     [data-tooltip]::before {
@@ -252,16 +262,6 @@
     [data-tooltip]:hover::before {
       opacity: 1;
       visibility: visible;
-    }
-    [data-tooltip-right]::before {
-      left: auto;
-      right: 12px;
-    }
-    [data-tooltip-bottom]::before {
-      bottom: auto;
-      top: calc(100% + 4px);
-      border-top-color: transparent;
-      border-bottom-color: rgba(34, 211, 238, 0.3);
     }
 
     /* Sort toggle button */
@@ -450,17 +450,21 @@
     <div class="max-w-7xl mx-auto px-4 py-3">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
-          <h1 class="font-display text-lg text-terminal-bright tracking-wider" data-tooltip="memory-ts visualization dashboard&#10;Semantic memory system for Claude Code">
+          <h1 class="font-display text-lg text-terminal-bright tracking-wider tooltip-bottom" data-tooltip="memory-ts visualization dashboard
+Semantic memory system for Claude Code">
             <span class="text-mem-global">&gt;</span> MEMORY_BANK
           </h1>
-          <div class="flex items-center gap-2 text-xs text-terminal-muted" data-tooltip="Connection status&#10;Green = connected to memory-ts API">
+          <div class="flex items-center gap-2 text-xs text-terminal-muted tooltip-bottom" data-tooltip="Connection status
+Green = connected to memory-ts API">
             <span class="w-2 h-2 bg-mem-active rounded-full pulse"></span>
             <span id="status">SCANNING...</span>
           </div>
         </div>
         <div class="flex items-center gap-4 text-xs">
-          <span id="last-refresh" class="text-terminal-muted" data-tooltip="Last data refresh time&#10;Auto-refreshes every 30 seconds">--:--:--</span>
-          <button onclick="loadMemories()" class="px-3 py-1 border border-terminal-border hover:border-mem-global hover:text-mem-global transition-colors" data-tooltip="Manually refresh memories&#10;Keyboard: Cmd+R">
+          <span id="last-refresh" class="text-terminal-muted tooltip-bottom" data-tooltip="Last data refresh time
+Auto-refreshes every 30 seconds">--:--:--</span>
+          <button onclick="loadMemories()" class="px-3 py-1 border border-terminal-border hover:border-mem-global hover:text-mem-global transition-colors tooltip-bottom tooltip-right" data-tooltip="Manually refresh memories
+Keyboard: Cmd+R">
             REFRESH
           </button>
         </div>
@@ -1111,23 +1115,24 @@ Click to switch">
         <div class="memory-card ${scopeClass} ${statusClass} ${buriedClass} imp-${impLevel} bg-terminal-surface border border-terminal-border ${impGlow} border-l-2 cursor-pointer" data-memory-id="${mem.id}" onclick="toggleExpand(this)">
           <div class="p-4">
             <!-- Top row: Importance bar + date/domain + expand icon -->
-            <div class="flex items-center justify-between mb-2 gap-3">
-              <span class="importance-bar ${impLevel}" data-tooltip="${impLabel}
+            <div class="flex items-center mb-2 gap-3">
+              <span class="importance-bar ${impLevel} flex-shrink-0" data-tooltip="${impLabel}
 Score: ${importance}/10">${importanceBars}</span>
-              <div class="flex items-center gap-2 text-xs">
+              <div class="flex-1"></div>
+              <div class="flex items-center gap-2 text-xs flex-shrink-0">
                 <span class="date-friendly" data-tooltip="${fullDate}">${friendlyDate}</span>
                 ${domain ? `<span class="domain-tag clickable-link" onclick="filterByDomain('${domain}', event)" data-tooltip="Knowledge domain
 Click to filter by ${domain}">${domain}</span>` : ''}
+                <span class="text-terminal-muted ml-1">▼</span>
               </div>
-              <span class="text-terminal-muted text-xs">▼</span>
             </div>
 
             <!-- Title row with scope icon -->
-            <div class="flex items-start gap-2 mb-2">
-              <span class="${scopeColor}" data-tooltip="${scopeLabel} memory
+            <div class="flex items-start gap-2 mb-2 pr-16">
+              <span class="${scopeColor} flex-shrink-0" data-tooltip="${scopeLabel} memory
 ${mem.scope === 'global' ? 'Applies across all projects' : 'Only surfaces in this project'}">${scopeIcon}</span>
-              <span class="memory-title text-terminal-bright font-medium leading-snug flex-1">${mem.title || 'Untitled'}</span>
-              ${mem.status === 'superseded' ? '<span class="text-xs text-mem-superseded" data-tooltip="Replaced by newer version">[SUPERSEDED]</span>' : ''}
+              <span class="memory-title text-terminal-bright font-medium leading-snug">${mem.title || 'Untitled'}</span>
+              ${mem.status === 'superseded' ? '<span class="text-xs text-mem-superseded flex-shrink-0" data-tooltip="Replaced by newer version">[SUPERSEDED]</span>' : ''}
             </div>
 
             <!-- Memory Controls - left aligned under text -->
