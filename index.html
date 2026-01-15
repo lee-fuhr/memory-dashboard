@@ -58,7 +58,7 @@
         rgba(0, 0, 0, 0.1) 4px
       );
       pointer-events: none;
-      z-index: 1000;
+      z-index: 100;
     }
 
     /* Glow effects */
@@ -105,41 +105,34 @@
       position: relative;
     }
 
-    /* Control buttons */
-    .memory-controls {
-      display: flex;
-      gap: 4px;
-    }
-    .memory-controls button {
-      padding: 4px 8px;
-      font-size: 11px;
-      border: 1px solid #3a3a4a;
+    /* Control buttons (inline in header) */
+    .memory-card button.promote,
+    .memory-card button.demote,
+    .memory-card button.bury,
+    .memory-card button.unbury {
       background: transparent;
-      color: #c8c8d0;
+      color: #6b7280;
       cursor: pointer;
       transition: all 0.15s;
+      font-size: 10px;
     }
-    .memory-controls button:hover {
-      border-color: #22d3ee;
-      color: #22d3ee;
-    }
-    .memory-controls button.promote:hover {
+    .memory-card button.promote:hover {
       border-color: #4ade80;
       color: #4ade80;
     }
-    .memory-controls button.demote:hover {
+    .memory-card button.demote:hover {
       border-color: #fbbf24;
       color: #fbbf24;
     }
-    .memory-controls button.bury:hover {
+    .memory-card button.bury:hover {
       border-color: #ef4444;
       color: #ef4444;
     }
-    .memory-controls button.unbury:hover {
+    .memory-card button.unbury:hover {
       border-color: #4ade80;
       color: #4ade80;
     }
-    .memory-controls button:disabled {
+    .memory-card button:disabled {
       opacity: 0.3;
       cursor: not-allowed;
     }
@@ -163,10 +156,12 @@
     .memory-content {
       max-height: 0;
       overflow: hidden;
-      transition: max-height 0.3s ease;
+      transition: max-height 0.3s ease, overflow 0s 0.3s;
     }
     .memory-card.expanded .memory-content {
-      max-height: 500px;
+      max-height: 800px;
+      overflow: visible;
+      transition: max-height 0.3s ease, overflow 0s 0s;
     }
 
     /* Pulse animation for live indicator */
@@ -176,6 +171,16 @@
     }
     .pulse {
       animation: pulse 2s infinite;
+    }
+
+    /* Toast animations */
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(-50%) translateY(0); }
+      to { opacity: 0; transform: translateX(-50%) translateY(20px); }
     }
 
     /* Custom scrollbar */
@@ -202,29 +207,32 @@
       position: absolute;
       bottom: calc(100% + 8px);
       left: 0;
-      background: linear-gradient(135deg, #1a1a24 0%, #12121a 100%);
+      background: rgb(26, 26, 36);
       color: #e8e8f0;
       padding: 10px 14px;
       border-radius: 8px;
       font-size: 12px;
-      line-height: 1.5;
+      line-height: 1.4;
       white-space: pre-line;
-      max-width: 260px;
-      min-width: 140px;
-      z-index: 1000;
+      max-width: 320px;
+      min-width: 120px;
+      width: max-content;
+      z-index: 9999;
       opacity: 0;
       visibility: hidden;
-      transition: opacity 0.2s, visibility 0.2s;
+      transition: opacity 0.15s, visibility 0.15s;
       pointer-events: none;
-      border: 1px solid rgba(34, 211, 238, 0.3);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+      border: 1px solid rgba(34, 211, 238, 0.4);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.9);
       text-align: left;
       font-weight: 400;
       letter-spacing: 0.01em;
+      isolation: isolate;
     }
     [data-tooltip]:hover::after {
       opacity: 1;
       visibility: visible;
+      background: rgb(26, 26, 36);
     }
     /* Bottom tooltips for top elements (class-based) */
     .tooltip-bottom[data-tooltip]::after {
@@ -246,6 +254,11 @@
       left: auto;
       right: 12px;
     }
+    /* Compact tooltips for small elements */
+    .tooltip-compact[data-tooltip]::after {
+      white-space: nowrap;
+      min-width: auto;
+    }
     /* Tooltip arrow */
     [data-tooltip]::before {
       content: '';
@@ -254,10 +267,10 @@
       left: 12px;
       border: 6px solid transparent;
       border-top-color: rgba(34, 211, 238, 0.3);
-      z-index: 1001;
+      z-index: 10000;
       opacity: 0;
       visibility: hidden;
-      transition: opacity 0.2s, visibility 0.2s;
+      transition: opacity 0.15s, visibility 0.15s;
     }
     [data-tooltip]:hover::before {
       opacity: 1;
@@ -321,9 +334,29 @@
       letter-spacing: 1px;
       font-size: 11px;
     }
-    .memory-card .importance-bar.high { color: #4ade80; }
-    .memory-card .importance-bar.medium { color: #fbbf24; }
-    .memory-card .importance-bar.low { color: #6b7280; }
+
+    /* 10-level importance gradient: cool gray → warm → green → cyan */
+    .memory-card.imp-1 { border-left-color: #64748b; }
+    .memory-card.imp-2 { border-left-color: #6b7280; }
+    .memory-card.imp-3 { border-left-color: #78716c; }
+    .memory-card.imp-4 { border-left-color: #a8a29e; }
+    .memory-card.imp-5 { border-left-color: #d97706; }
+    .memory-card.imp-6 { border-left-color: #f59e0b; }
+    .memory-card.imp-7 { border-left-color: #eab308; }
+    .memory-card.imp-8 { border-left-color: #84cc16; }
+    .memory-card.imp-9 { border-left-color: #22c55e; }
+    .memory-card.imp-10 { border-left-color: #22d3ee; }
+
+    .importance-bar.imp-1 { color: #64748b; }
+    .importance-bar.imp-2 { color: #6b7280; }
+    .importance-bar.imp-3 { color: #78716c; }
+    .importance-bar.imp-4 { color: #a8a29e; }
+    .importance-bar.imp-5 { color: #d97706; }
+    .importance-bar.imp-6 { color: #f59e0b; }
+    .importance-bar.imp-7 { color: #eab308; }
+    .importance-bar.imp-8 { color: #84cc16; }
+    .importance-bar.imp-9 { color: #22c55e; }
+    .importance-bar.imp-10 { color: #22d3ee; }
 
     /* Superseded timeline */
     .superseded-timeline {
@@ -375,16 +408,20 @@
       color: #22d3ee;
     }
 
-    /* Clear filters button */
+    /* Clear filters button - icon only, square */
     .clear-filters {
-      padding: 4px 10px;
-      font-size: 11px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      font-size: 14px;
       border: 1px solid #3a3a4a;
       background: transparent;
       color: #6b7280;
       cursor: pointer;
       transition: all 0.15s;
-      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .clear-filters:hover {
       border-color: #ef4444;
@@ -432,7 +469,8 @@
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 8px center;
-      min-width: 120px;
+      width: 140px;
+      flex-shrink: 0;
     }
     .filter-select:hover {
       border-color: #22d3ee;
@@ -475,66 +513,49 @@ Keyboard: Cmd+R">
   <main class="max-w-7xl mx-auto px-4 py-6">
 
     <!-- Stats Bar - Clickable Filters -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4" style="overflow: visible; position: relative; z-index: 10;">
+      <div class="stat-card tooltip-bottom relative bg-terminal-surface border border-terminal-border p-3"
            onclick="toggleStatFilter('all')"
            data-filter="all"
-           data-tooltip="All memories in memory-ts
-Click to clear all filters">
+           data-tooltip="All memories stored in memory-ts. Click to clear filters.">
         <div class="text-xs text-terminal-muted mb-1">TOTAL</div>
         <div id="stat-total" class="text-2xl font-bold text-terminal-bright">--</div>
       </div>
-      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+      <div class="stat-card tooltip-bottom relative bg-terminal-surface border border-terminal-border p-3"
            onclick="toggleStatFilter('active')"
            data-filter="active"
-           data-tooltip="Currently in use
-Surfaced when semantically relevant
-Click to filter">
+           data-tooltip="Memories Claude can surface when relevant. Click to filter.">
         <div class="text-xs text-terminal-muted mb-1">ACTIVE</div>
         <div id="stat-active" class="text-2xl font-bold text-mem-active">--</div>
       </div>
-      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+      <div class="stat-card tooltip-bottom relative bg-terminal-surface border border-terminal-border p-3"
            onclick="toggleStatFilter('superseded')"
            data-filter="superseded"
-           data-tooltip="Replaced by newer versions
-Kept for history, not surfaced
-Click to filter">
+           data-tooltip="Replaced by newer versions—kept for history but not surfaced. Click to filter.">
         <div class="text-xs text-terminal-muted mb-1">SUPERSEDED</div>
         <div id="stat-superseded" class="text-2xl font-bold text-mem-superseded">--</div>
       </div>
-      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+      <div class="stat-card tooltip-bottom tooltip-right relative bg-terminal-surface border border-terminal-border p-3"
            onclick="toggleStatFilter('global')"
            data-filter="global"
-           data-tooltip="Cross-project learnings
-Apply everywhere
-Click to filter">
+           data-tooltip="Cross-project learnings that apply everywhere. Click to filter.">
         <div class="text-xs text-mem-global mb-1">🌍 GLOBAL</div>
         <div id="stat-global" class="text-2xl font-bold text-mem-global">--</div>
       </div>
-      <div class="stat-card relative bg-terminal-surface border border-terminal-border p-3"
+      <div class="stat-card tooltip-bottom tooltip-right relative bg-terminal-surface border border-terminal-border p-3"
            onclick="toggleStatFilter('project')"
            data-filter="project"
-           data-tooltip="Project-specific context
-Only surfaces in that project
-Click to filter">
+           data-tooltip="Context specific to one project—only surfaces there. Click to filter.">
         <div class="text-xs text-mem-project mb-1">📁 PROJECT</div>
         <div id="stat-project" class="text-2xl font-bold text-mem-project">--</div>
       </div>
     </div>
 
     <!-- Filters Row - Consolidated -->
-    <div class="flex flex-wrap items-center gap-2 mb-4">
-      <select id="filter-scope" onchange="applyFilters()" class="filter-select">
-        <option value="all">All scopes</option>
-        <option value="global">🌍 Global only</option>
-        <option value="project">📁 Project only</option>
-      </select>
-      <select id="filter-status" onchange="applyFilters()" class="filter-select">
-        <option value="all">All statuses</option>
-        <option value="active">Active</option>
-        <option value="buried">Buried</option>
-        <option value="superseded">Superseded</option>
-      </select>
+    <div class="flex flex-wrap items-center gap-2 mb-4" style="position: relative; z-index: 1;">
+      <!-- Hidden elements for filter state (used by stat buttons) -->
+      <input type="hidden" id="filter-scope" value="all">
+      <input type="hidden" id="filter-status" value="all">
       <select id="filter-importance" onchange="applyFilters()" class="filter-select">
         <option value="all">All importance</option>
         <option value="high">High (8-10)</option>
@@ -545,12 +566,11 @@ Click to filter">
         <option value="all">All domains</option>
         <!-- Populated dynamically -->
       </select>
-      <button id="sort-toggle" onclick="toggleSort()" class="sort-toggle" data-tooltip="Toggle sort order
-Click to switch">
+      <button id="sort-toggle" onclick="toggleSort()" class="sort-toggle by-recency tooltip-compact" data-tooltip="Toggle sort">
         <span class="sort-icon">⇅</span>
-        <span id="sort-label">IMPORTANCE</span>
+        <span id="sort-label">RECENCY</span>
       </button>
-      <button id="clear-filters" onclick="clearFilters()" class="clear-filters" data-tooltip="Reset all filters">✕ Clear</button>
+      <button id="clear-filters" onclick="clearFilters()" class="clear-filters" data-tooltip="Reset all filters">✕</button>
       <div class="flex-1 min-w-[180px]">
         <input
           type="text"
@@ -564,10 +584,10 @@ Click to switch">
     </div>
 
     <!-- Timeline (horizontal, compact) -->
-    <div class="mb-4 bg-terminal-surface border border-terminal-border p-2" data-tooltip="Last 30 days of memory activity&#10;Cyan = global, Yellow = project&#10;Taller bars = more memories that day">
+    <div class="mb-4 bg-terminal-surface border border-terminal-border p-2">
       <div class="flex items-center gap-2">
-        <span class="text-xs text-terminal-muted">TIMELINE</span>
-        <div id="timeline" class="flex items-end gap-0.5 h-6 flex-1 overflow-x-auto">
+        <span class="text-xs text-terminal-muted flex-shrink-0">TIMELINE</span>
+        <div id="timeline" class="flex items-end h-6 flex-1">
           <!-- Timeline bars injected by JS -->
         </div>
       </div>
@@ -834,8 +854,8 @@ Click to switch">
       return 'just now';
     }
 
-    // Sort state
-    let sortByImportance = true;
+    // Sort state - default to recency
+    let sortByImportance = false;
 
     // Toggle sort between importance and recency
     function toggleSort() {
@@ -886,32 +906,53 @@ Click to switch">
       }
     }
 
-    // Toggle filter from stat card click
+    // Toggle filter from stat card click - buttons can be combined
     function toggleStatFilter(filter) {
       const card = document.querySelector(`[data-filter="${filter}"]`);
       const isActive = card.classList.contains('active');
 
-      // Clear all active states
-      document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
-
-      if (filter === 'all' || isActive) {
-        // Clear filters
+      if (filter === 'all') {
+        // Clear all filters
         clearFilters();
-      } else {
-        // Apply filter
-        card.classList.add('active');
-
-        if (filter === 'active' || filter === 'superseded') {
-          document.getElementById('filter-status').value = filter;
-          document.getElementById('filter-scope').value = 'all';
-        } else if (filter === 'global' || filter === 'project') {
-          document.getElementById('filter-scope').value = filter;
-          document.getElementById('filter-status').value = 'all';
-        }
-
-        updateClearButton();
-        applyFilters();
+        return;
       }
+
+      // Toggle this card's active state
+      if (isActive) {
+        card.classList.remove('active');
+      } else {
+        card.classList.add('active');
+      }
+
+      // Status filters (active, superseded) - only one can be active
+      if (filter === 'active' || filter === 'superseded') {
+        // Deactivate other status filter
+        const otherStatus = filter === 'active' ? 'superseded' : 'active';
+        document.querySelector(`[data-filter="${otherStatus}"]`)?.classList.remove('active');
+
+        document.getElementById('filter-status').value = isActive ? 'all' : filter;
+      }
+
+      // Scope filters (global, project) - only one can be active
+      if (filter === 'global' || filter === 'project') {
+        // Deactivate other scope filter
+        const otherScope = filter === 'global' ? 'project' : 'global';
+        document.querySelector(`[data-filter="${otherScope}"]`)?.classList.remove('active');
+
+        document.getElementById('filter-scope').value = isActive ? 'all' : filter;
+      }
+
+      // Update "all" card visual - active if no filters
+      const allCard = document.querySelector(`[data-filter="all"]`);
+      const anyActive = document.querySelectorAll('.stat-card.active:not([data-filter="all"])').length > 0;
+      if (!anyActive) {
+        allCard?.classList.add('active');
+      } else {
+        allCard?.classList.remove('active');
+      }
+
+      updateClearButton();
+      applyFilters();
     }
 
     // Filter by domain (click on domain tag)
@@ -925,15 +966,45 @@ Click to switch">
     // Open session in Warp terminal
     function openSessionInWarp(sessionId, event) {
       event.stopPropagation();
-      // Warp doesn't have a direct session resume, but we can try to use claude --resume
+      // Build the --resume command
       const cmd = `claude --resume "${sessionId}"`;
-      // Try to open Warp with the command
-      // This will copy to clipboard and alert user since direct execution isn't possible from browser
+      // Copy to clipboard with toast feedback
       navigator.clipboard.writeText(cmd).then(() => {
-        alert(`Copied to clipboard:\\n${cmd}\\n\\nPaste in Warp to resume this session.`);
+        showToast('Copied! Paste in terminal to resume this Claude session.');
       }).catch(() => {
-        prompt('Copy this command to resume in Warp:', cmd);
+        // Fallback for clipboard failure
+        prompt('Copy this command:', cmd);
       });
+    }
+
+    // Simple toast notification
+    function showToast(message) {
+      const existing = document.querySelector('.toast-notification');
+      if (existing) existing.remove();
+
+      const toast = document.createElement('div');
+      toast.className = 'toast-notification';
+      toast.textContent = message;
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, #1a1a24, #12121a);
+        color: #e8e8f0;
+        padding: 12px 24px;
+        border-radius: 8px;
+        border: 1px solid rgba(34, 211, 238, 0.4);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        font-size: 13px;
+        z-index: 10000;
+        animation: toastIn 0.3s ease;
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.animation = 'toastOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
     }
 
     // Reveal file in Finder
@@ -1163,11 +1234,9 @@ Click to switch">
       const safeContextType = escapeHtml(mem.context_type || '');
       const safeTemporal = escapeHtml(mem.temporal_relevance || '');
 
-      // Importance color classes
-      const impLevel = importance >= 8 ? 'high' : importance >= 4 ? 'medium' : 'low';
-      const impColor = importance >= 8 ? 'text-mem-active' : importance >= 4 ? 'text-mem-project' : 'text-terminal-muted';
-      const impGlow = importance >= 8 ? 'border-l-mem-active' : importance >= 4 ? 'border-l-mem-project' : '';
-      const impLabel = importance >= 8 ? 'High priority' : importance >= 4 ? 'Medium priority' : 'Low priority';
+      // Importance color classes - 10-level gradient
+      const impLevel = `imp-${Math.max(1, Math.min(10, Math.round(importance)))}`;
+      const impLabel = `Priority ${importance}/10`;
 
       // Visual bar with 10 segments
       const filledBars = Math.round(importance);
@@ -1193,55 +1262,50 @@ Click to switch">
       const safeDomain = escapeAttr(domain || '');
 
       return `
-        <div class="memory-card ${scopeClass} ${statusClass} ${buriedClass} imp-${impLevel} bg-terminal-surface border border-terminal-border ${impGlow} border-l-2 cursor-pointer" data-memory-id="${safeId}" onclick="toggleExpand(this)">
+        <div class="memory-card ${scopeClass} ${statusClass} ${buriedClass} ${impLevel} bg-terminal-surface border border-terminal-border border-l-2 cursor-pointer" data-memory-id="${safeId}" onclick="toggleExpand(this)">
           <div class="p-4">
-            <!-- Top row: Importance bar + date/domain + expand icon -->
-            <div class="flex items-center mb-2 gap-3">
-              <span class="importance-bar ${impLevel} flex-shrink-0" data-tooltip="${impLabel}
-Score: ${importance}/10">${importanceBars}</span>
+            <!-- Top row: Importance bar + vote buttons + date/domain -->
+            <div class="flex items-center mb-2 gap-2">
+              <span class="importance-bar ${impLevel} flex-shrink-0 tooltip-compact" data-tooltip="${impLabel}">${importanceBars}</span>
+              <div class="flex items-center gap-1 flex-shrink-0" onclick="event.stopPropagation()">
+                <button class="promote px-1.5 py-0.5 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
+                        onclick="promoteMemory('${safeId}', ${importance}, event)"
+                        data-tooltip="Boost +1"
+                        ${importance >= 10 ? 'disabled' : ''}>⬆</button>
+                <button class="demote px-1.5 py-0.5 text-xs border border-terminal-border hover:border-mem-project hover:text-mem-project transition-colors"
+                        onclick="demoteMemory('${safeId}', ${importance}, event)"
+                        data-tooltip="Lower -1"
+                        ${importance <= 1 ? 'disabled' : ''}>⬇</button>
+                ${mem.exclude_from_retrieval
+                  ? `<button class="unbury px-1.5 py-0.5 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
+                            onclick="unburyMemory('${safeId}', event)"
+                            data-tooltip="Unbury">👁</button>`
+                  : `<button class="bury px-1.5 py-0.5 text-xs border border-terminal-border text-terminal-muted hover:border-red-500 hover:text-red-500 transition-colors"
+                            onclick="buryMemory('${safeId}', event)"
+                            data-tooltip="Hide from retrieval">⊘</button>`
+                }
+              </div>
               <div class="flex-1"></div>
               <div class="flex items-center gap-2 text-xs flex-shrink-0">
-                <span class="date-friendly" data-tooltip="${escapeAttr(fullDate)}">${escapeHtml(friendlyDate)}</span>
-                ${domain ? `<span class="domain-tag clickable-link" onclick="filterByDomain('${safeDomain}', event)" data-tooltip="Knowledge domain
-Click to filter by ${safeDomain}">${escapeHtml(domain)}</span>` : ''}
-                <span class="text-terminal-muted ml-1">▼</span>
+                <span class="date-friendly tooltip-compact" data-tooltip="${escapeAttr(fullDate)}">${escapeHtml(friendlyDate)}</span>
+                ${domain ? `<span class="domain-tag clickable-link" onclick="filterByDomain('${safeDomain}', event)" data-tooltip="Filter by ${safeDomain}">${escapeHtml(domain)}</span>` : ''}
+                <span class="text-terminal-muted">▼</span>
               </div>
             </div>
 
             <!-- Title row with scope icon -->
-            <div class="flex items-start gap-2 mb-2 pr-16">
-              <span class="${scopeColor} flex-shrink-0" data-tooltip="${scopeLabel} memory
-${mem.scope === 'global' ? 'Applies across all projects' : 'Only surfaces in this project'}">${scopeIcon}</span>
+            <div class="flex items-start gap-2">
+              <span class="${scopeColor} flex-shrink-0 tooltip-compact" data-tooltip="${scopeLabel}">${scopeIcon}</span>
               <span class="memory-title text-terminal-bright font-medium leading-snug">${safeTitle}</span>
-              ${mem.status === 'superseded' ? '<span class="text-xs text-mem-superseded flex-shrink-0" data-tooltip="Replaced by newer version">[SUPERSEDED]</span>' : ''}
-            </div>
-
-            <!-- Memory Controls - left aligned under text -->
-            <div class="flex items-center gap-2 ml-6" onclick="event.stopPropagation()">
-              <button class="promote px-2 py-1 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
-                      onclick="promoteMemory('${safeId}', ${importance}, event)"
-                      data-tooltip="Boost importance +1"
-                      ${importance >= 10 ? 'disabled' : ''}>⬆</button>
-              <button class="demote px-2 py-1 text-xs border border-terminal-border hover:border-mem-project hover:text-mem-project transition-colors"
-                      onclick="demoteMemory('${safeId}', ${importance}, event)"
-                      data-tooltip="Lower importance -1"
-                      ${importance <= 1 ? 'disabled' : ''}>⬇</button>
-              ${mem.exclude_from_retrieval
-                ? `<button class="unbury px-2 py-1 text-xs border border-terminal-border hover:border-mem-active hover:text-mem-active transition-colors"
-                          onclick="unburyMemory('${safeId}', event)"
-                          data-tooltip="Unbury this memory">👁</button>`
-                : `<button class="bury px-2 py-1 text-xs border border-terminal-border hover:border-red-500 hover:text-red-500 transition-colors"
-                          onclick="buryMemory('${safeId}', event)"
-                          data-tooltip="Bury from retrieval">🚫</button>`
-              }
+              ${mem.status === 'superseded' ? '<span class="text-xs text-mem-superseded flex-shrink-0">[SUPERSEDED]</span>' : ''}
             </div>
           </div>
           <div class="memory-content border-t border-terminal-border">
             <div class="p-4 space-y-3">
               <!-- Tags -->
               ${safeTags.length ? `
-                <div class="flex flex-wrap gap-1.5" data-tooltip="Click a tag to filter&#10;Semantic tags for retrieval matching">
-                  ${safeTags.map(t => `<button onclick="filterByTag('${t}', event)" class="tag-btn text-xs px-2 py-1 bg-mem-global/20 text-mem-global border border-mem-global/30 rounded hover:bg-mem-global/40 hover:border-mem-global transition-colors cursor-pointer">#${escapeHtml(t)}</button>`).join('')}
+                <div class="flex flex-wrap gap-1.5">
+                  ${safeTags.map(t => `<button onclick="filterByTag('${t}', event)" class="tag-btn tooltip-bottom text-xs px-2 py-1 bg-mem-global/20 text-mem-global border border-mem-global/30 rounded hover:bg-mem-global/40 hover:border-mem-global transition-colors cursor-pointer" data-tooltip="Click to filter by this tag">#${escapeHtml(t)}</button>`).join('')}
                 </div>
               ` : ''}
 
@@ -1259,21 +1323,17 @@ ${mem.scope === 'global' ? 'Applies across all projects' : 'Only surfaces in thi
 
               <!-- Metadata grid -->
               <div class="grid grid-cols-2 gap-2 text-xs border-t border-terminal-border pt-3 mt-3">
-                ${safeContextType ? `<div data-tooltip="Context type
-technical, personal, procedural"><span class="text-terminal-muted">Context:</span> <span class="text-terminal-text">${safeContextType}</span></div>` : ''}
-                ${safeTemporal ? `<div data-tooltip="Relevance duration
-persistent, temporary, time-bound"><span class="text-terminal-muted">Temporal:</span> <span class="text-terminal-text">${safeTemporal}</span></div>` : ''}
-                ${mem.confidence_score ? `<div data-tooltip="Claude's confidence
-when capturing this memory"><span class="text-terminal-muted">Confidence:</span> <span class="text-terminal-text">${Math.round(parseFloat(mem.confidence_score) * 100)}%</span></div>` : ''}
-                ${safeSessionId ? `<div data-tooltip="Click to open session in Warp
-Session where memory was captured"><span class="text-terminal-muted">Session:</span> <span class="text-terminal-text font-mono text-[10px] clickable-link" onclick="openSessionInWarp('${safeSessionId}', event)">${escapeHtml(mem.session_id.slice(0, 8))}...</span></div>` : ''}
-                ${mem.action_required ? `<div data-tooltip="Follow-up action needed"><span class="text-mem-project">⚡ Action required</span></div>` : ''}
-                ${mem.awaiting_decision ? `<div data-tooltip="Waiting for your input"><span class="text-mem-global">⏳ Awaiting decision</span></div>` : ''}
+                ${safeContextType ? `<div class="tooltip-bottom" data-tooltip="${safeContextType === 'technical' ? 'Technical: Code patterns, APIs, architecture decisions' : safeContextType === 'personal' ? 'Personal: Preferences, communication style, working patterns' : safeContextType === 'procedural' ? 'Procedural: Workflows, processes, how things are done' : 'How this memory should be applied'}"><span class="text-terminal-muted">Context:</span> <span class="text-terminal-text">${safeContextType}</span></div>` : ''}
+                ${safeTemporal ? `<div class="tooltip-bottom" data-tooltip="${safeTemporal === 'persistent' ? 'Persistent: Always relevant, no expiration' : safeTemporal === 'temporary' ? 'Temporary: Short-term relevance, may become stale' : safeTemporal === 'time-bound' ? 'Time-bound: Relevant until a specific date/event' : 'How long this memory stays relevant'}"><span class="text-terminal-muted">Temporal:</span> <span class="text-terminal-text">${safeTemporal}</span></div>` : ''}
+                ${mem.confidence_score ? `<div class="tooltip-bottom" data-tooltip="How certain Claude was when extracting this insight. Higher = more reliable."><span class="text-terminal-muted">Confidence:</span> <span class="text-terminal-text">${Math.round(parseFloat(mem.confidence_score) * 100)}%</span></div>` : ''}
+                ${safeSessionId ? `<div class="tooltip-bottom" data-tooltip="Click to open the Claude Code session where this was captured"><span class="text-terminal-muted">Session:</span> <span class="text-terminal-text font-mono text-[10px] clickable-link" onclick="openSessionInWarp('${safeSessionId}', event)">${escapeHtml(mem.session_id.slice(0, 8))}...</span></div>` : ''}
+                ${mem.action_required ? `<div class="tooltip-bottom" data-tooltip="This memory flagged something that needs your attention"><span class="text-mem-project">⚡ Action required</span></div>` : ''}
+                ${mem.awaiting_decision ? `<div class="tooltip-bottom" data-tooltip="Claude is waiting for you to make a call on this"><span class="text-mem-global">⏳ Awaiting decision</span></div>` : ''}
               </div>
 
               <!-- Trigger phrases -->
               ${safeTriggers.length ? `
-                <div class="text-xs border-t border-terminal-border pt-3" data-tooltip="Semantic matching keywords">
+                <div class="text-xs border-t border-terminal-border pt-3 tooltip-bottom" data-tooltip="Keywords that help Claude find this memory when relevant topics come up">
                   <span class="text-terminal-muted">Triggers:</span>
                   <span class="text-terminal-text">${safeTriggers.join(', ')}</span>
                 </div>
@@ -1317,50 +1377,60 @@ Session where memory was captured"><span class="text-terminal-muted">Session:</s
     // Render timeline
     function renderTimeline() {
       const container = document.getElementById('timeline');
-      const now = new Date();
-      const days = 30;
-      const maxBarHeight = 24; // pixels
+      const maxBarHeight = 24;
 
       // Group memories by day
       const byDay = {};
-      for (let i = 0; i < days; i++) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        const key = date.toISOString().split('T')[0];
-        byDay[key] = { global: 0, project: 0 };
-      }
-
       memories.forEach(mem => {
         if (!mem.created) return;
         const key = mem.created.split('T')[0];
-        if (byDay[key]) {
-          if (mem.scope === 'global') byDay[key].global++;
-          else byDay[key].project++;
-        }
+        if (!byDay[key]) byDay[key] = { global: 0, project: 0 };
+        if (mem.scope === 'global') byDay[key].global++;
+        else byDay[key].project++;
       });
 
+      // Get sorted dates with data
+      const datesWithData = Object.keys(byDay).sort();
+      if (datesWithData.length === 0) {
+        container.innerHTML = '<span class="text-xs text-terminal-muted">No data</span>';
+        return;
+      }
+
       const maxCount = Math.max(1, ...Object.values(byDay).map(d => d.global + d.project));
+      const startDate = new Date(datesWithData[0]);
+      const endDate = new Date(datesWithData[datesWithData.length - 1]);
 
-      container.innerHTML = Object.entries(byDay)
-        .reverse()
-        .map(([date, counts]) => {
-          const total = counts.global + counts.project;
-          const totalHeight = Math.max(2, (total / maxCount) * maxBarHeight);
-          const globalHeight = counts.global ? Math.round((counts.global / total) * totalHeight) : 0;
-          const projectHeight = counts.project ? Math.round((counts.project / total) * totalHeight) : 0;
+      // Build all days in range
+      const allDays = [];
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const key = d.toISOString().split('T')[0];
+        allDays.push({ date: key, counts: byDay[key] || null });
+      }
 
-          const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      container.innerHTML = allDays.map(({ date, counts }) => {
+        const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+        if (!counts) {
+          // Gap day - empty indicator
           return `
-            <div class="flex flex-col items-end justify-end" style="height: ${maxBarHeight}px" data-tooltip="${formattedDate}
-${counts.global} global, ${counts.project} project">
-              ${projectHeight > 0 ? `<div class="w-1.5 bg-mem-project rounded-t-sm" style="height: ${projectHeight}px"></div>` : ''}
-              ${globalHeight > 0 ? `<div class="w-1.5 bg-mem-global ${projectHeight > 0 ? '' : 'rounded-t-sm'}" style="height: ${globalHeight}px"></div>` : ''}
-              ${total === 0 ? `<div class="w-1.5 bg-terminal-border/30 rounded-t-sm" style="height: 2px"></div>` : ''}
+            <div class="timeline-bar tooltip-bottom" style="flex: 1; height: ${maxBarHeight}px; min-width: 2px; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 1px;" data-tooltip="${formattedDate} — no activity">
+              <div style="width: 100%; height: 2px; background: rgba(58, 58, 74, 0.3); border-radius: 1px;"></div>
             </div>
           `;
-        })
-        .join('');
+        }
+
+        const total = counts.global + counts.project;
+        const totalHeight = Math.max(4, (total / maxCount) * maxBarHeight);
+        const globalHeight = counts.global ? Math.round((counts.global / total) * totalHeight) : 0;
+        const projectHeight = counts.project ? Math.round((counts.project / total) * totalHeight) : 0;
+
+        return `
+          <div class="timeline-bar tooltip-bottom" style="flex: 1; height: ${maxBarHeight}px; min-width: 2px; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 1px;" data-tooltip="${formattedDate} — ${total} memor${total === 1 ? 'y' : 'ies'}&#10;${counts.global} global, ${counts.project} project">
+            ${projectHeight > 0 ? `<div style="width: 100%; height: ${projectHeight}px; background: #fbbf24; border-radius: 2px 2px 0 0;"></div>` : ''}
+            ${globalHeight > 0 ? `<div style="width: 100%; height: ${globalHeight}px; background: #22d3ee; ${projectHeight > 0 ? '' : 'border-radius: 2px 2px 0 0;'}"></div>` : ''}
+          </div>
+        `;
+      }).join('');
     }
 
     // Apply filters
