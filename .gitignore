@@ -1,0 +1,10 @@
+# Local data
+memories
+memories/
+
+# OS files
+.DS_Store
+
+# Editor
+*.swp
+*.swo
