@@ -2,7 +2,7 @@
 
 A terminal-aesthetic dashboard for visualizing and curating [memory-ts](https://github.com/RLabs-Inc/memory-ts) memories.
 
-![Terminal aesthetic with scanlines, JetBrains Mono, and cyan/amber color coding](https://img.shields.io/badge/aesthetic-terminal%20vibes-22d3ee)
+![Memory dashboard screenshot](screenshot.png)
 
 ## Features
 
